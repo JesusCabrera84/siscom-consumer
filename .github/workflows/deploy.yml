@@ -69,15 +69,35 @@ jobs:
           type=ref,event=pr
           type=sha,prefix={{branch}}-
           
-    - name: Build and push Docker image
+    - name: Build Docker image (solo build local, sin push)
       uses: docker/build-push-action@v4
       with:
         context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        push: false
+        tags: siscom-consumer:latest
         labels: ${{ steps.meta.outputs.labels }}
+    #    - name: Build and push Docker image
+    #      uses: docker/build-push-action@v4
+    #      with:
+    #        context: .
+    #        push: true
+    #        tags: ${{ steps.meta.outputs.tags }}
+    #        labels: ${{ steps.meta.outputs.labels }}
         
-    - name: Deploy to EC2
+    - name: Guardar imagen Docker como tar
+      run: docker save -o siscom-consumer.tar siscom-consumer:latest
+
+    - name: Copiar imagen Docker a EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        port: ${{ secrets.EC2_SSH_PORT }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "siscom-consumer.tar"
+        target: "/tmp/siscom-consumer.tar"
+
+    - name: Deploy a EC2 usando imagen local
       uses: appleboy/ssh-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -109,18 +129,18 @@ jobs:
 
           sudo systemctl enable docker
           sudo systemctl start docker
+
+          # Cargar la imagen Docker
+          docker load -i /tmp/siscom-consumer.tar
+
           # Stop existing container
           docker stop tracking-consumer || true
           docker rm tracking-consumer || true
-          
-          # Pull new image
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}
-          
-          # Create config directory
+
+          # Crear directorio de config
           mkdir -p /opt/tracking-consumer/config
-          
-          # Create config file with environment variables
+
+          # Crear archivo de configuración (puedes personalizar esto según tus variables)
           cat > /opt/tracking-consumer/config/app.toml << EOF
           [mqtt]
           broker = "${{ vars.MQTT_BROKER }}"
@@ -132,7 +152,7 @@ jobs:
           keep_alive_secs = ${{ vars.MQTT_KEEP_ALIVE_SECS }}
           clean_session = ${{ vars.MQTT_CLEAN_SESSION }}
           max_reconnect_attempts = ${{ vars.MQTT_MAX_RECONNECT_ATTEMPTS }}
-          
+
           [kafka]
           brokers = ["${{ vars.KAFKA_BROKERS }}"]
           position_topic = "${{ vars.KAFKA_POSITION_TOPIC }}"
@@ -141,7 +161,7 @@ jobs:
           batch_timeout_ms = ${{ vars.KAFKA_BATCH_TIMEOUT_MS }}
           compression = "${{ vars.KAFKA_COMPRESSION }}"
           retries = ${{ vars.KAFKA_RETRIES }}
-          
+
           [database]
           host = "${{ vars.DB_HOST }}"
           port = ${{ vars.DB_PORT }}
@@ -152,7 +172,7 @@ jobs:
           min_connections = ${{ vars.DB_MIN_CONNECTIONS }}
           connection_timeout_secs = ${{ vars.DB_CONNECTION_TIMEOUT_SECS }}
           idle_timeout_secs = ${{ vars.DB_IDLE_TIMEOUT_SECS }}
-          
+
           [processing]
           poi_radius_meters = ${{ vars.PROCESSING_POI_RADIUS_METERS }}
           geofence_check_interval_ms = ${{ vars.PROCESSING_GEOFENCE_CHECK_INTERVAL_MS }}
@@ -160,7 +180,7 @@ jobs:
           message_buffer_size = ${{ vars.PROCESSING_MESSAGE_BUFFER_SIZE }}
           batch_processing_size = ${{ vars.PROCESSING_BATCH_PROCESSING_SIZE }}
           max_parallel_devices = ${{ vars.PROCESSING_MAX_PARALLEL_DEVICES }}
-          
+
           [logging]
           level = "${{ vars.LOGGING_LEVEL }}"
           file_path = "${{ vars.LOGGING_FILE_PATH }}"
@@ -168,7 +188,7 @@ jobs:
           max_files = ${{ vars.LOGGING_MAX_FILES }}
           json_format = ${{ vars.LOGGING_JSON_FORMAT }}
           EOF
-          
+
           # Run new container
           docker run -d \
             --name tracking-consumer \
@@ -176,7 +196,7 @@ jobs:
             -v /opt/tracking-consumer/config:/app/config:ro \
             -v /var/log/tracking-consumer:/var/log/tracking-consumer \
             --network host \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}
-          
+            siscom-consumer:latest
+
           # Show logs
           docker logs tracking-consumer --tail 50
