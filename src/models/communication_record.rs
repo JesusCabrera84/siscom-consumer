@@ -106,8 +106,8 @@ impl CommunicationRecord {
 
     // Funciones auxiliares para parsing seguro
     fn parse_f64(s: &str) -> Option<f64> {
-        if s.is_empty() { 
-            return None; 
+        if s.is_empty() {
+            return None;
         }
         // Remover el signo '+' si existe
         let clean = s.strip_prefix('+').unwrap_or(s);
@@ -115,15 +115,15 @@ impl CommunicationRecord {
     }
 
     fn parse_i64(s: &str) -> Option<i64> {
-        if s.is_empty() { 
-            return None; 
+        if s.is_empty() {
+            return None;
         }
         s.parse().ok()
     }
 
     fn parse_i32(s: &str) -> Option<i32> {
-        if s.is_empty() { 
-            return None; 
+        if s.is_empty() {
+            return None;
         }
         s.parse().ok()
     }

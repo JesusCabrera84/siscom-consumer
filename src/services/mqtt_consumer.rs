@@ -1,11 +1,11 @@
 use anyhow::Result;
+use bytes::Bytes;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
-use bytes::Bytes;
 
 use crate::models::SuntechMessage;
 
@@ -28,15 +28,14 @@ impl MqttConsumerService {
         clean_session: bool,
         buffer_size: usize,
     ) -> Result<(Self, mpsc::UnboundedReceiver<SuntechMessage>)> {
-        
         // Configurar opciones MQTT para máximo rendimiento
         let mut mqttoptions = MqttOptions::new(client_id, broker, port);
-        
+
         // Configuraciones de rendimiento
         mqttoptions.set_keep_alive(Duration::from_secs(keep_alive_secs));
         mqttoptions.set_clean_session(clean_session);
         mqttoptions.set_max_packet_size(1024 * 1024, 1024 * 1024); // 1MB max packet
-        
+
         // Buffer grande para manejo de ráfagas
         mqttoptions.set_inflight(100); // Múltiples mensajes en vuelo
         mqttoptions.set_request_channel_capacity(buffer_size);
@@ -49,7 +48,7 @@ impl MqttConsumerService {
 
         // Crear cliente y event loop
         let (client, event_loop) = AsyncClient::new(mqttoptions, buffer_size);
-        
+
         // Canal para mensajes procesados
         let (tx, rx) = mpsc::unbounded_channel();
 
@@ -65,7 +64,7 @@ impl MqttConsumerService {
             let topic = topic.to_string();
             async move {
                 info!("🔌 Suscribiéndose al topic: {}", topic);
-                
+
                 // Usar QoS 0 para máxima velocidad (fire and forget)
                 if let Err(e) = client.subscribe(&topic, QoS::AtMostOnce).await {
                     error!("Error suscribiéndose al topic {}: {}", topic, e);
@@ -115,7 +114,7 @@ impl MqttConsumerService {
                 }
                 Err(e) => {
                     error!("Error en MQTT event loop: {}", e);
-                    
+
                     // Intentar reconectar después de un error
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     warn!("Intentando reconectar...");
@@ -132,14 +131,21 @@ impl MqttConsumerService {
     ) -> Result<()> {
         // Convertir payload a string
         let message_str = String::from_utf8_lossy(&payload);
-        
-        debug!("📨 Mensaje recibido en topic '{}': {} bytes", topic, payload.len());
+
+        debug!(
+            "📨 Mensaje recibido en topic '{}': {} bytes",
+            topic,
+            payload.len()
+        );
 
         // Intentar parsear como JSON de Suntech
         match serde_json::from_str::<SuntechMessage>(&message_str) {
             Ok(suntech_message) => {
-                debug!("✅ Mensaje Suntech parseado para dispositivo: {}", suntech_message.data.device_id);
-                
+                debug!(
+                    "✅ Mensaje Suntech parseado para dispositivo: {}",
+                    suntech_message.data.device_id
+                );
+
                 // Enviar mensaje procesado al canal
                 if let Err(e) = sender.send(suntech_message) {
                     error!("Error enviando mensaje al canal de procesamiento: {}", e);
@@ -173,19 +179,19 @@ impl MqttConsumerService {
     /// Obtiene estadísticas del consumidor
     pub async fn get_statistics(&self) -> std::collections::HashMap<String, i64> {
         let mut stats = std::collections::HashMap::new();
-        
+
         // Estadísticas básicas (en rumqttc las estadísticas son limitadas)
         stats.insert("connection_status".to_string(), 1); // 1 = conectado, 0 = desconectado
-        
+
         stats
     }
 
     /// Desconecta del broker MQTT
     pub async fn disconnect(&self) -> Result<()> {
         info!("🔌 Desconectando de MQTT...");
-        
+
         self.client.disconnect().await?;
-        
+
         info!("✅ Desconectado de MQTT");
         Ok(())
     }
@@ -193,9 +199,9 @@ impl MqttConsumerService {
     /// Vuelve a suscribirse a un topic (útil para reconexiones)
     pub async fn resubscribe(&self, topic: &str) -> Result<()> {
         info!("🔄 Resuscribiéndose al topic: {}", topic);
-        
+
         self.client.subscribe(topic, QoS::AtMostOnce).await?;
-        
+
         Ok(())
     }
 }

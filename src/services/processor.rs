@@ -72,7 +72,7 @@ impl MessageProcessor {
                     match message {
                         Some(msg) => {
                             batch.push(msg);
-                            
+
                             // Si el batch está lleno, procesarlo inmediatamente
                             if batch.len() >= self.batch_size {
                                 self.process_batch(&mut batch).await;
@@ -87,7 +87,7 @@ impl MessageProcessor {
                         }
                     }
                 }
-                
+
                 // Timer para flush periódico
                 _ = flush_timer.tick() => {
                     if !batch.is_empty() {
@@ -212,7 +212,10 @@ impl MessageProcessor {
 
     /// Procesa un mensaje individual (para casos urgentes)
     pub async fn process_single_message(&self, message: SuntechMessage) -> Result<()> {
-        debug!("🚨 Procesando mensaje individual para dispositivo: {}", message.data.device_id);
+        debug!(
+            "Procesando mensaje individual para dispositivo: {}",
+            message.data.device_id
+        );
 
         // Convertir a registro de BD
         let record = CommunicationRecord::from_suntech_message(&message)?;
@@ -228,7 +231,7 @@ impl MessageProcessor {
             }
         };
 
-        let (db_result, kafka_pos_result, kafka_notif_result) = 
+        let (db_result, kafka_pos_result, kafka_notif_result) =
             tokio::join!(db_future, kafka_position_future, kafka_notification_future);
 
         // Verificar resultados

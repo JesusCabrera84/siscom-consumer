@@ -25,9 +25,7 @@ impl DatabaseService {
             .await?;
 
         // Test de conexión
-        sqlx::query("SELECT 1")
-            .fetch_one(&pool)
-            .await?;
+        sqlx::query("SELECT 1").fetch_one(&pool).await?;
 
         info!("✅ Conexión a PostgreSQL establecida");
 
@@ -42,7 +40,7 @@ impl DatabaseService {
     pub async fn add_to_buffer(&self, record: CommunicationRecord) -> Result<bool> {
         let mut buffer = self.buffer.write().await;
         buffer.push(record);
-        
+
         // Retorna true si el buffer está lleno y necesita ser procesado
         Ok(buffer.len() >= self.batch_size)
     }
@@ -69,10 +67,10 @@ impl DatabaseService {
         }
 
         let mut tx = self.pool.begin().await?;
-        
+
         // Usar directamente el método fallback que funciona
         self.fallback_batch_insert(&mut tx, records).await?;
-        
+
         tx.commit().await?;
         Ok(())
     }
@@ -85,7 +83,7 @@ impl DatabaseService {
     ) -> Result<()> {
         // Dividir en chunks más pequeños para evitar límites de PostgreSQL
         const CHUNK_SIZE: usize = 100;
-        
+
         for chunk in records.chunks(CHUNK_SIZE) {
             let mut query_builder = sqlx::QueryBuilder::new(
                 "INSERT INTO communications_suntech (
@@ -96,7 +94,7 @@ impl DatabaseService {
                     speed, speed_time, total_distance, trip_distance, trip_hourmeter,
                     bytes_count, client_ip, client_port, decoded_epoch, received_epoch,
                     raw_message, received_at, created_at
-                ) "
+                ) ",
             );
 
             query_builder.push_values(chunk, |mut b, record| {
@@ -140,10 +138,7 @@ impl DatabaseService {
                     .push_bind(record.created_at);
             });
 
-            query_builder
-                .build()
-                .execute(&mut **tx)
-                .await?;
+            query_builder.build().execute(&mut **tx).await?;
         }
 
         Ok(())

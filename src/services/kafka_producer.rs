@@ -37,7 +37,7 @@ impl KafkaProducerService {
         retries: i32,
     ) -> Result<Self> {
         let mut config = ClientConfig::new();
-        
+
         config
             .set("bootstrap.servers", brokers.join(","))
             .set("message.timeout.ms", "30000")
@@ -76,7 +76,8 @@ impl KafkaProducerService {
             topic: self.position_topic.clone(),
             key,
             payload,
-        }).await?;
+        })
+        .await?;
 
         Ok(())
     }
@@ -92,7 +93,8 @@ impl KafkaProducerService {
                 topic: self.notifications_topic.clone(),
                 key,
                 payload,
-            }).await?;
+            })
+            .await?;
         }
 
         Ok(())
@@ -102,7 +104,7 @@ impl KafkaProducerService {
     async fn add_to_buffer(&self, message: KafkaMessage) -> Result<bool> {
         let mut buffer = self.buffer.write().await;
         buffer.push(message);
-        
+
         // Retorna true si el buffer está lleno y necesita ser procesado
         Ok(buffer.len() >= self.batch_size)
     }
@@ -129,13 +131,16 @@ impl KafkaProducerService {
         }
 
         let mut futures = Vec::new();
-        
+
         // Crear todos los records primero para evitar problemas de borrowing
-        let records: Vec<_> = messages.iter().map(|msg| {
-            FutureRecord::to(&msg.topic)
-                .key(&msg.key)
-                .payload(&msg.payload)
-        }).collect();
+        let records: Vec<_> = messages
+            .iter()
+            .map(|msg| {
+                FutureRecord::to(&msg.topic)
+                    .key(&msg.key)
+                    .payload(&msg.payload)
+            })
+            .collect();
 
         for record in records {
             let future = self.producer.send(record, Duration::from_secs(30));
@@ -159,7 +164,10 @@ impl KafkaProducerService {
         }
 
         if errors > 0 {
-            warn!("Se produjeron {} errores al enviar lote de mensajes", errors);
+            warn!(
+                "Se produjeron {} errores al enviar lote de mensajes",
+                errors
+            );
         }
 
         Ok(())
@@ -167,9 +175,7 @@ impl KafkaProducerService {
 
     /// Envío individual para casos urgentes
     pub async fn send_immediate(&self, topic: &str, key: &str, payload: &str) -> Result<()> {
-        let record = FutureRecord::to(topic)
-            .key(key)
-            .payload(payload);
+        let record = FutureRecord::to(topic).key(key).payload(payload);
 
         match self.producer.send(record, Duration::from_secs(30)).await {
             Ok(_) => Ok(()),
@@ -188,18 +194,22 @@ impl KafkaProducerService {
     /// Obtiene estadísticas del productor
     pub fn get_statistics(&self) -> Result<HashMap<String, i64>> {
         let mut stats = HashMap::new();
-        
+
         // En rdkafka, las estadísticas se obtienen de forma diferente
         // Aquí puedes implementar métricas personalizadas si las necesitas
         stats.insert("producer_queue_size".to_string(), 0);
-        
+
         Ok(stats)
     }
 
     /// Verifica el estado de salud del productor
     pub async fn health_check(&self) -> Result<bool> {
         // Intentar obtener metadata de los topics
-        match self.producer.client().fetch_metadata(None, Duration::from_secs(5)) {
+        match self
+            .producer
+            .client()
+            .fetch_metadata(None, Duration::from_secs(5))
+        {
             Ok(_) => Ok(true),
             Err(e) => {
                 error!("Kafka health check failed: {}", e);
@@ -211,13 +221,13 @@ impl KafkaProducerService {
     /// Cierra el productor y envía mensajes pendientes
     pub async fn shutdown(&self) -> Result<()> {
         info!("Cerrando Kafka producer...");
-        
+
         // Enviar mensajes pendientes
         self.flush_buffer().await?;
-        
+
         // Forzar flush del producer interno
         self.producer.flush(Duration::from_secs(30))?;
-        
+
         info!("✅ Kafka producer cerrado correctamente");
         Ok(())
     }

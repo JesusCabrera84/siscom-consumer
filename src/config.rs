@@ -83,7 +83,7 @@ impl AppConfig {
         config = config.add_source(
             Environment::with_prefix("TRACKING_CONSUMER")
                 .separator("_")
-                .try_parsing(true)
+                .try_parsing(true),
         );
 
         let config = config.build()?;

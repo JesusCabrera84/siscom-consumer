@@ -1,6 +1,6 @@
-pub mod mqtt_consumer;
-pub mod kafka_producer;
 pub mod database;
+pub mod kafka_producer;
+pub mod mqtt_consumer;
 pub mod processor;
 
 pub use database::DatabaseService;
