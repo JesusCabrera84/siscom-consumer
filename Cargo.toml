@@ -53,7 +53,7 @@ mockall = "0.12"
 testcontainers = "0.15"
 
 [[bin]]
-name = "tracking-consumer"
+name = "siscom-consumer"
 path = "src/main.rs"
 
 [profile.release]
