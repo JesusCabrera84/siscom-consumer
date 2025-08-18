@@ -10,7 +10,7 @@ mod processors;
 mod services;
 
 use config::AppConfig;
-use services::{DatabaseService, KafkaProducerService, MessageProcessor, MqttConsumerService};
+use services::{DatabaseService, KafkaProducerService, MqttConsumerService, MessageProcessor};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,10 +20,7 @@ async fn main() -> Result<()> {
         .json()
         .init();
 
-    info!(
-        "🚀 Iniciando Tracking Consumer Rust v{}",
-        env!("CARGO_PKG_VERSION")
-    );
+    info!("🚀 Iniciando Tracking Consumer Rust v{}", env!("CARGO_PKG_VERSION"));
 
     // Load configuration
     let config = match AppConfig::load() {
@@ -164,18 +161,18 @@ async fn start_processing_loop(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
-
+            
             let db_health = health_db.health_check().await.unwrap_or(false);
             let kafka_health = health_kafka.health_check().await.unwrap_or(false);
-
+            
             if !db_health {
                 warn!("⚠️ Base de datos no está saludable");
             }
-
+            
             if !kafka_health {
                 warn!("⚠️ Kafka no está saludable");
             }
-
+            
             if db_health && kafka_health {
                 info!("💚 Todos los servicios están saludables");
             }
@@ -188,12 +185,10 @@ async fn start_processing_loop(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
             interval.tick().await;
-
+            
             let stats = stats_processor.get_statistics().await;
-            info!(
-                "📊 Estadísticas - DB Buffer: {}, Kafka Buffer: {}, Batch Size: {}",
-                stats.db_buffer_size, stats.kafka_buffer_size, stats.batch_size
-            );
+            info!("📊 Estadísticas - DB Buffer: {}, Kafka Buffer: {}, Batch Size: {}", 
+                  stats.db_buffer_size, stats.kafka_buffer_size, stats.batch_size);
         }
     });
 
@@ -218,7 +213,7 @@ async fn start_processing_loop(
 
     // Graceful shutdown
     info!("🔄 Iniciando shutdown graceful...");
-
+    
     // Flush all pending data
     if let Err(e) = services.message_processor.flush_all_buffers().await {
         error!("Error flushing buffers: {}", e);
@@ -244,7 +239,7 @@ fn setup_shutdown_handler() -> tokio::sync::oneshot::Receiver<()> {
 
     tokio::spawn(async move {
         let mut tx = Some(tx);
-
+        
         // Handle Ctrl+C
         if let Ok(()) = signal::ctrl_c().await {
             info!("🔔 Ctrl+C recibido");
