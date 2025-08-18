@@ -96,6 +96,7 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         source: "siscom-consumer.tar"
         target: "/tmp/siscom-consumer.tar"
+        debug: true
 
     - name: Deploy a EC2 usando imagen local
       uses: appleboy/ssh-action@v0.1.7
