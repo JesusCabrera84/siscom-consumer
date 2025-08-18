@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  tracking-consumer:
+    build: .
+    container_name: tracking-consumer-dev
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/var/log/tracking-consumer
+    environment:
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - tracking-network
+
+  postgres:
+    image: postgres:15
+    container_name: tracking-postgres
+    environment:
+      POSTGRES_DB: tracking
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - tracking-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: tracking-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - "9092:9092"
+    networks:
+      - tracking-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: tracking-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - tracking-network
+
+volumes:
+  postgres_data:
+
+networks:
+  tracking-network:
+    driver: bridge
