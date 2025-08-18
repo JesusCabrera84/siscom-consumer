@@ -88,6 +88,9 @@ jobs:
     - name: Guardar imagen Docker como tar
       run: docker save -o siscom-consumer.tar siscom-consumer:latest
 
+    - name: Cambiar permisos del archivo tar
+      run: chmod 644 siscom-consumer.tar  
+
     - name: Copiar imagen Docker a EC2
       uses: appleboy/scp-action@v0.1.7
       with:
