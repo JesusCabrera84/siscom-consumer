@@ -1,0 +1,45 @@
+[mqtt]
+broker = "34.237.30.30"
+port = 1883
+topic = "tracking/data"
+username = "administrator"
+password = "ewioquiowuqpweiqouewqpDDSa4asda55"
+client_id = "tracking-consumer-rust"
+keep_alive_secs = 60
+clean_session = true
+max_reconnect_attempts = 10
+
+[kafka]
+brokers = ["127.0.0.1:9092"]
+position_topic = "position-topic"
+notifications_topic = "notifications-topic"
+batch_size = 1000
+batch_timeout_ms = 100
+compression = "snappy"
+retries = 3
+
+[database]
+host = "localhost"
+port = 5432
+database = "test-ana"
+username = "test"
+password = "test"
+max_connections = 20
+min_connections = 5
+connection_timeout_secs = 30
+idle_timeout_secs = 600
+
+[processing]
+poi_radius_meters = 100.0
+geofence_check_interval_ms = 1000
+worker_threads = 4
+message_buffer_size = 10000
+batch_processing_size = 100
+max_parallel_devices = 50
+
+[logging]
+level = "info"
+file_path = "/var/log/tracking-consumer"
+max_file_size_mb = 100
+max_files = 10
+json_format = true
