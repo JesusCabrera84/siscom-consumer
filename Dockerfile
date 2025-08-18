@@ -38,24 +38,24 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder stage
-COPY --from=builder /app/target/release/tracking-consumer /usr/local/bin/tracking-consumer
+COPY --from=builder /app/target/release/siscom-consumer /usr/local/bin/siscom-consumer
 
 # Copy default config (will be overridden by volume mount)
 COPY config/ config/
 
 # Create log directory
-RUN mkdir -p /var/log/tracking-consumer
+RUN mkdir -p /var/log/siscom-consumer
 
 # Create non-root user
-RUN useradd -r -s /bin/false tracking && \
-    chown -R tracking:tracking /var/log/tracking-consumer
+RUN useradd -r -s /bin/false siscom && \
+    chown -R siscom:siscom /var/log/siscom-consumer
 
-USER tracking
+USER siscom
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD pgrep tracking-consumer || exit 1
+  CMD pgrep siscom-consumer || exit 1
 
 EXPOSE 8080
 
-CMD ["tracking-consumer"]
+CMD ["siscom-consumer"]
