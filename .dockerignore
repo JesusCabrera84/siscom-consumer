@@ -1,1 +1,10 @@
 Cargo.lock
+.git
+.gitignore
+target
+logs
+*.log
+*.tmp
+.DS_Store
+node_modules
+.env
