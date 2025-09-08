@@ -28,12 +28,12 @@ cargo run --release
 ## Architecture
 
 ```
-MQTT → Consumer → Processor → [POI/Geofence Logic] → Kafka + PostgreSQL
+MQTT → Consumer → Kafka + PostgreSQL
 ```
 
 ## How It Works
 
-**Tracking Consumer Rust** is a high-performance service designed to consume GPS tracking data from an MQTT broker, process it (including POI and Geofence logic), and forward the results to Kafka and PostgreSQL for further use and analytics.
+**Tracking Consumer Rust** is a high-performance service designed to consume GPS tracking data from an MQTT broker and forward the raw data to Kafka and PostgreSQL for further use and analytics. The logic for Points of Interest (POI) and Geofence evaluation is handled by a separate microservice that consumes from Kafka.
 
 ### Execution Flow
 
@@ -43,14 +43,14 @@ MQTT → Consumer → Processor → [POI/Geofence Logic] → Kafka + PostgreSQL
 
 2. **Service Initialization**
    - Connects to PostgreSQL (for persistent storage).
-   - Configures the Kafka producer (for streaming processed data).
+   - Configures the Kafka producer (for streaming data).
    - Sets up the MQTT consumer (to receive GPS messages).
-   - Initializes the message processor (handles business logic, batching, and dispatch).
+   - Initializes the message processor (handles batching and dispatch).
 
 3. **Main Processing Loop**
    - Starts the MQTT consumer in the background, which receives messages and pushes them to an internal channel.
-   - The message processor consumes messages from the channel, applies POI and Geofence logic, and batches results.
-   - Processed data is sent to Kafka and PostgreSQL.
+   - The message processor consumes messages from the channel and batches results.
+   - Data is sent to Kafka and PostgreSQL.
    - Health checks and statistics are periodically logged.
 
 4. **Graceful Shutdown**
@@ -63,10 +63,11 @@ flowchart TD
     A[MQTT Broker] -->|GPS Messages| B(MQTT Consumer)
     B --> C[Internal Channel]
     C --> D[Message Processor]
-    D -->|POI/Geofence Logic| E[Kafka Producer]
-    D -->|POI/Geofence Logic| F[PostgreSQL]
+    D --> E[Kafka Producer]
+    D --> F[PostgreSQL]
     E --> G[Kafka Broker]
     F --> H[Database]
+    G --> I[POI/Geofence Microservice]
 ```
 
 ## Performance

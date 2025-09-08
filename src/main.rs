@@ -6,7 +6,6 @@ use tracing::{error, info, warn};
 mod config;
 mod errors;
 mod models;
-mod processors;
 mod services;
 
 use config::AppConfig;
