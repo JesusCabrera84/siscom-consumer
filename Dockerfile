@@ -1,5 +1,5 @@
 # Multi-stage build para optimizar tamaño
-FROM rust:1.80-bookwormt as builder
+FROM rust:1.80-bookworm as builder
 
 WORKDIR /app
 
