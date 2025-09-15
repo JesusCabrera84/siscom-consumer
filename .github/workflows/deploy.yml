@@ -47,7 +47,6 @@ jobs:
     needs: test
     environment: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     
     steps:
     - name: Checkout code
@@ -211,13 +210,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-deploy
     if: always()
+
     steps:
-      - name: Borrar archivo tar en EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          port: ${{ secrets.EC2_SSH_PORT }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            rm -f /tmp/siscom-consumer.tar
+    - name: Borrar archivo tar en EC2
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        port: ${{ secrets.EC2_SSH_PORT }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          rm -f /tmp/siscom-consumer.tar
