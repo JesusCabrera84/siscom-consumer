@@ -68,8 +68,13 @@ impl DatabaseService {
 
         let mut tx = self.pool.begin().await?;
 
-        // Usar directamente el método fallback que funciona
-        self.fallback_batch_insert(&mut tx, records).await?;
+        self.fallback_batch_insert(&mut tx, records.clone()).await?;
+
+        // Update current state
+
+        self.fallback_batch_insert_current(&mut tx, &records)
+            .await?;
+
 
         tx.commit().await?;
         Ok(())
@@ -137,6 +142,118 @@ impl DatabaseService {
                     .push_bind(record.received_at)
                     .push_bind(record.created_at);
             });
+
+            query_builder.build().execute(&mut **tx).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Fallback: Inserción por lotes usando INSERT con múltiples valores on communications_current_state
+    async fn fallback_batch_insert_current(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        records: &[CommunicationRecord],
+    ) -> Result<()> {
+        // Dividir en chunks más pequeños para evitar límites de PostgreSQL
+        const CHUNK_SIZE: usize = 100;
+
+        for chunk in records.chunks(CHUNK_SIZE) {
+            let mut query_builder = sqlx::QueryBuilder::new(
+                r#"INSERT INTO communications_current_state (
+                    uuid, device_id, backup_battery_voltage, cell_id, course, delivery_type,
+                    engine_status, firmware, fix_status, gps_datetime, gps_epoch, idle_time,
+                    lac, latitude, longitude, main_battery_voltage, mcc, mnc, model,
+                    msg_class, msg_counter, network_status, odometer, rx_lvl, satellites,
+                    speed, speed_time, total_distance, trip_distance, trip_hourmeter,
+                    bytes_count, client_ip, client_port, decoded_epoch, received_epoch,
+                    raw_message, received_at, created_at
+                ) "#,
+            );
+
+            query_builder.push_values(chunk, |mut b, record| {
+                b.push_bind(&record.uuid)
+                    .push_bind(&record.device_id)
+                    .push_bind(record.backup_battery_voltage)
+                    .push_bind(&record.cell_id)
+                    .push_bind(record.course)
+                    .push_bind(&record.delivery_type)
+                    .push_bind(&record.engine_status)
+                    .push_bind(&record.firmware)
+                    .push_bind(&record.fix_status)
+                    .push_bind(record.gps_datetime)
+                    .push_bind(record.gps_epoch)
+                    .push_bind(record.idle_time)
+                    .push_bind(&record.lac)
+                    .push_bind(record.latitude)
+                    .push_bind(record.longitude)
+                    .push_bind(record.main_battery_voltage)
+                    .push_bind(&record.mcc)
+                    .push_bind(&record.mnc)
+                    .push_bind(&record.model)
+                    .push_bind(&record.msg_class)
+                    .push_bind(record.msg_counter)
+                    .push_bind(&record.network_status)
+                    .push_bind(record.odometer)
+                    .push_bind(record.rx_lvl)
+                    .push_bind(record.satellites)
+                    .push_bind(record.speed)
+                    .push_bind(record.speed_time)
+                    .push_bind(record.total_distance)
+                    .push_bind(record.trip_distance)
+                    .push_bind(record.trip_hourmeter)
+                    .push_bind(record.bytes_count)
+                    .push_bind(None::<String>)
+                    .push_bind(record.client_port)
+                    .push_bind(record.decoded_epoch)
+                    .push_bind(record.received_epoch)
+                    .push_bind(&record.raw_message)
+                    .push_bind(record.received_at)
+                    .push_bind(record.created_at);
+            });
+
+            query_builder.push(
+                r#"
+                ON CONFLICT (device_id) DO UPDATE SET
+                    uuid = EXCLUDED.uuid,
+                    backup_battery_voltage = EXCLUDED.backup_battery_voltage,
+                    cell_id = EXCLUDED.cell_id,
+                    course = EXCLUDED.course,
+                    delivery_type = EXCLUDED.delivery_type,
+                    engine_status = EXCLUDED.engine_status,
+                    firmware = EXCLUDED.firmware,
+                    fix_status = EXCLUDED.fix_status,
+                    gps_datetime = EXCLUDED.gps_datetime,
+                    gps_epoch = EXCLUDED.gps_epoch,
+                    idle_time = EXCLUDED.idle_time,
+                    lac = EXCLUDED.lac,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    main_battery_voltage = EXCLUDED.main_battery_voltage,
+                    mcc = EXCLUDED.mcc,
+                    mnc = EXCLUDED.mnc,
+                    model = EXCLUDED.model,
+                    msg_class = EXCLUDED.msg_class,
+                    msg_counter = EXCLUDED.msg_counter,
+                    network_status = EXCLUDED.network_status,
+                    odometer = EXCLUDED.odometer,
+                    rx_lvl = EXCLUDED.rx_lvl,
+                    satellites = EXCLUDED.satellites,
+                    speed = EXCLUDED.speed,
+                    speed_time = EXCLUDED.speed_time,
+                    total_distance = EXCLUDED.total_distance,
+                    trip_distance = EXCLUDED.trip_distance,
+                    trip_hourmeter = EXCLUDED.trip_hourmeter,
+                    bytes_count = EXCLUDED.bytes_count,
+                    client_ip = EXCLUDED.client_ip,
+                    client_port = EXCLUDED.client_port,
+                    decoded_epoch = EXCLUDED.decoded_epoch,
+                    received_epoch = EXCLUDED.received_epoch,
+                    raw_message = EXCLUDED.raw_message,
+                    received_at = NOW(),
+                    created_at = EXCLUDED.created_at
+                "#,
+            );
 
             query_builder.build().execute(&mut **tx).await?;
         }

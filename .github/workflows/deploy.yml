@@ -2,9 +2,9 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -99,7 +99,7 @@ jobs:
         port: ${{ secrets.EC2_SSH_PORT }}
         key: ${{ secrets.EC2_SSH_KEY }}
         source: "siscom-consumer.tar"
-        target: "/tmp/siscom-consumer.tar"
+        target: "/tmp/"
         debug: true
 
     - name: Deploy a EC2 usando imagen local
@@ -139,14 +139,14 @@ jobs:
           docker load -i /tmp/siscom-consumer.tar
 
           # Stop existing container
-          docker stop tracking-consumer || true
-          docker rm tracking-consumer || true
+          docker stop siscom-consumer || true
+          docker rm siscom-consumer || true
 
           # Crear directorio de config
-          mkdir -p /opt/tracking-consumer/config
+          mkdir -p /opt/siscom-consumer/config
 
           # Crear archivo de configuración (puedes personalizar esto según tus variables)
-          cat > /opt/tracking-consumer/config/app.toml << EOF
+          cat > /opt/siscom-consumer/config/app.toml << EOF
           [mqtt]
           broker = "${{ vars.MQTT_BROKER }}"
           port = ${{ vars.MQTT_PORT }}
