@@ -75,7 +75,6 @@ impl DatabaseService {
         self.fallback_batch_insert_current(&mut tx, &records)
             .await?;
 
-
         tx.commit().await?;
         Ok(())
     }
