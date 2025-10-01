@@ -10,6 +10,7 @@ clean_session = true
 max_reconnect_attempts = 10
 
 [kafka]
+# enabled = false  # Descomenta para deshabilitar Kafka (por defecto está deshabilitado)
 brokers = ["127.0.0.1:9092"]
 position_topic = "position-topic"
 notifications_topic = "notifications-topic"

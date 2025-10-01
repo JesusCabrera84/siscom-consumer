@@ -27,6 +27,7 @@ pub struct MqttConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaConfig {
+    pub enabled: bool, // NUEVO: bandera para habilitar/deshabilitar Kafka
     pub brokers: Vec<String>,
     pub position_topic: String,
     pub notifications_topic: String,
@@ -113,13 +114,15 @@ impl AppConfig {
             return Err(anyhow::anyhow!("MQTT topic no puede estar vacío"));
         }
 
-        // Validar configuración Kafka
-        if self.kafka.brokers.is_empty() {
-            return Err(anyhow::anyhow!("Kafka brokers no puede estar vacío"));
-        }
+        // Validar configuración Kafka SOLO si está habilitado
+        if self.kafka.enabled {
+            if self.kafka.brokers.is_empty() {
+                return Err(anyhow::anyhow!("Kafka brokers no puede estar vacío"));
+            }
 
-        if self.kafka.position_topic.is_empty() {
-            return Err(anyhow::anyhow!("Kafka position topic no puede estar vacío"));
+            if self.kafka.position_topic.is_empty() {
+                return Err(anyhow::anyhow!("Kafka position topic no puede estar vacío"));
+            }
         }
 
         // Validar configuración de base de datos
@@ -158,6 +161,7 @@ impl AppConfig {
                 max_reconnect_attempts: 10,
             },
             kafka: KafkaConfig {
+                enabled: false, // Por defecto deshabilitado
                 brokers: vec!["localhost:9092".to_string()],
                 position_topic: "position-topic".to_string(),
                 notifications_topic: "notifications-topic".to_string(),

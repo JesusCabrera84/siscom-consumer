@@ -77,9 +77,23 @@ flowchart TD
 - **Latency**: <10ms processing time
 - **CPU**: ~5-15% on modern hardware
 
-## Configuration
+## Configuración
 
-Edit `config/app.toml` for detailed configuration.
+Puedes deshabilitar Kafka por configuración usando la bandera `enabled` en la sección `[kafka]` de tu `config/app.toml` o variable de entorno `TRACKING_CONSUMER_KAFKA_ENABLED`.
+
+Ejemplo:
+
+```toml
+[kafka]
+enabled = false  # Si está en false, la aplicación NO enviará datos a Kafka
+brokers = ["127.0.0.1:9092"]
+position_topic = "position-topic"
+notifications_topic = "notifications-topic"
+# ... resto de opciones ...
+```
+
+- Si `enabled = false`, la aplicación funcionará solo con PostgreSQL y MQTT.
+- Si `enabled = true`, Kafka será obligatorio y se validará la configuración.
 
 ## Development
 

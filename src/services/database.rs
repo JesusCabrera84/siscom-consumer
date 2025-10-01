@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
@@ -258,70 +258,6 @@ impl DatabaseService {
         }
 
         Ok(())
-    }
-
-    /// Inserción individual para casos urgentes
-    pub async fn insert_single(&self, record: CommunicationRecord) -> Result<i64> {
-        let row = sqlx::query(
-            r#"
-            INSERT INTO communications_suntech (
-                uuid, device_id, backup_battery_voltage, cell_id, course, delivery_type,
-                engine_status, firmware, fix_status, gps_datetime, gps_epoch, idle_time,
-                lac, latitude, longitude, main_battery_voltage, mcc, mnc, model,
-                msg_class, msg_counter, network_status, odometer, rx_lvl, satellites,
-                speed, speed_time, total_distance, trip_distance, trip_hourmeter,
-                bytes_count, client_ip, client_port, decoded_epoch, received_epoch,
-                raw_message, received_at, created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                $31, $32, $33, $34, $35, $36, $37, $38
-            ) RETURNING id
-            "#,
-        )
-        .bind(record.uuid)
-        .bind(record.device_id)
-        .bind(record.backup_battery_voltage)
-        .bind(record.cell_id)
-        .bind(record.course)
-        .bind(record.delivery_type)
-        .bind(record.engine_status)
-        .bind(record.firmware)
-        .bind(record.fix_status)
-        .bind(record.gps_datetime)
-        .bind(record.gps_epoch)
-        .bind(record.idle_time)
-        .bind(record.lac)
-        .bind(record.latitude)
-        .bind(record.longitude)
-        .bind(record.main_battery_voltage)
-        .bind(record.mcc)
-        .bind(record.mnc)
-        .bind(record.model)
-        .bind(record.msg_class)
-        .bind(record.msg_counter)
-        .bind(record.network_status)
-        .bind(record.odometer)
-        .bind(record.rx_lvl)
-        .bind(record.satellites)
-        .bind(record.speed)
-        .bind(record.speed_time)
-        .bind(record.total_distance)
-        .bind(record.trip_distance)
-        .bind(record.trip_hourmeter)
-        .bind(record.bytes_count)
-        .bind(None::<String>)
-        .bind(record.client_port)
-        .bind(record.decoded_epoch)
-        .bind(record.received_epoch)
-        .bind(record.raw_message)
-        .bind(record.received_at)
-        .bind(record.created_at)
-        .fetch_one(&self.pool)
-        .await?;
-
-        let id: i64 = row.get("id");
-        Ok(id)
     }
 
     /// Obtiene el tamaño actual del buffer

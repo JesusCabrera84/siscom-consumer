@@ -161,31 +161,6 @@ impl MqttConsumerService {
         Ok(())
     }
 
-    /// Publica un mensaje de prueba (útil para testing)
-    pub async fn publish_test_message(&self, topic: &str, payload: &str) -> Result<()> {
-        self.client
-            .publish(topic, QoS::AtMostOnce, false, payload)
-            .await?;
-        Ok(())
-    }
-
-    /// Verifica el estado de la conexión MQTT
-    pub async fn health_check(&self) -> bool {
-        // En rumqttc, verificar salud es más complejo
-        // Por ahora, asumimos que está saludable si no hay errores recientes
-        true
-    }
-
-    /// Obtiene estadísticas del consumidor
-    pub async fn get_statistics(&self) -> std::collections::HashMap<String, i64> {
-        let mut stats = std::collections::HashMap::new();
-
-        // Estadísticas básicas (en rumqttc las estadísticas son limitadas)
-        stats.insert("connection_status".to_string(), 1); // 1 = conectado, 0 = desconectado
-
-        stats
-    }
-
     /// Desconecta del broker MQTT
     pub async fn disconnect(&self) -> Result<()> {
         info!("🔌 Desconectando de MQTT...");
@@ -193,15 +168,6 @@ impl MqttConsumerService {
         self.client.disconnect().await?;
 
         info!("✅ Desconectado de MQTT");
-        Ok(())
-    }
-
-    /// Vuelve a suscribirse a un topic (útil para reconexiones)
-    pub async fn resubscribe(&self, topic: &str) -> Result<()> {
-        info!("🔄 Resuscribiéndose al topic: {}", topic);
-
-        self.client.subscribe(topic, QoS::AtMostOnce).await?;
-
         Ok(())
     }
 }

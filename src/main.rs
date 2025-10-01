@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
 struct Services {
     mqtt_consumer: MqttConsumerService,
     database: Arc<DatabaseService>,
-    kafka_producer: Arc<KafkaProducerService>,
+    kafka_producer: Option<Arc<KafkaProducerService>>, // Puede ser None si está deshabilitado
     message_processor: MessageProcessor,
     mqtt_receiver: tokio::sync::mpsc::UnboundedReceiver<models::SuntechMessage>,
 }
@@ -89,16 +89,19 @@ async fn initialize_services(config: &AppConfig) -> Result<Services> {
         .await?,
     );
 
-    // Initialize Kafka producer
-    info!("📤 Configurando Kafka producer...");
-    let kafka_producer = Arc::new(KafkaProducerService::new(
-        &config.kafka.brokers,
-        config.kafka.position_topic.clone(),
-        config.kafka.notifications_topic.clone(),
-        config.kafka.batch_size,
-        config.kafka.compression.as_deref(),
-        config.kafka.retries,
-    )?);
+    // Inicializar Kafka solo si está habilitado
+    let kafka_producer = if config.kafka.enabled {
+        Some(Arc::new(KafkaProducerService::new(
+            &config.kafka.brokers,
+            config.kafka.position_topic.clone(),
+            config.kafka.notifications_topic.clone(),
+            config.kafka.batch_size,
+            config.kafka.compression.as_deref(),
+            config.kafka.retries,
+        )?))
+    } else {
+        None
+    };
 
     // Initialize MQTT consumer
     info!("📥 Configurando MQTT consumer...");
@@ -114,8 +117,7 @@ async fn initialize_services(config: &AppConfig) -> Result<Services> {
         config.processing.message_buffer_size,
     )?;
 
-    // Initialize message processor
-    info!("⚙️ Configurando procesador de mensajes...");
+    // Inicializar el procesador de mensajes, pasando Option<Arc<KafkaProducerService>>
     let message_processor = MessageProcessor::new(
         database.clone(),
         kafka_producer.clone(),
@@ -163,18 +165,18 @@ async fn start_processing_loop(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
-
             let db_health = health_db.health_check().await.unwrap_or(false);
-            let kafka_health = health_kafka.health_check().await.unwrap_or(false);
-
+            let kafka_health = if let Some(kafka) = &health_kafka {
+                kafka.health_check().await.unwrap_or(false)
+            } else {
+                true // Si no hay Kafka, considerarlo saludable
+            };
             if !db_health {
                 warn!("⚠️ Base de datos no está saludable");
             }
-
-            if !kafka_health {
+            if health_kafka.is_some() && !kafka_health {
                 warn!("⚠️ Kafka no está saludable");
             }
-
             if db_health && kafka_health {
                 info!("💚 Todos los servicios están saludables");
             }
@@ -223,9 +225,11 @@ async fn start_processing_loop(
         error!("Error flushing buffers: {}", e);
     }
 
-    // Shutdown Kafka producer
-    if let Err(e) = services.kafka_producer.shutdown().await {
-        error!("Error cerrando Kafka producer: {}", e);
+    // Shutdown Kafka producer if it exists
+    if let Some(kafka_producer) = services.kafka_producer {
+        if let Err(e) = kafka_producer.shutdown().await {
+            error!("Error cerrando Kafka producer: {}", e);
+        }
     }
 
     // Disconnect MQTT
