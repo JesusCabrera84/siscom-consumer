@@ -30,7 +30,7 @@ clean:
 
 # Setup development environment
 setup:
-	cp .env.template .env
+	@echo "Set environment variables before running. See README.md for the list of required variables."
 	cargo build
 
 # Run with Docker (future)

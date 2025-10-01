@@ -40,8 +40,6 @@ RUN apt-get update && apt-get install -y \
 # Copy binary from builder stage
 COPY --from=builder /app/target/release/siscom-consumer /usr/local/bin/siscom-consumer
 
-# Copy default config (will be overridden by volume mount)
-COPY config/ config/
 
 # Create log directory
 RUN mkdir -p /var/log/siscom-consumer
@@ -54,8 +52,7 @@ USER siscom
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD pgrep siscom-consumer || exit 1
+  CMD pidof siscom-consumer || exit 1
 
-EXPOSE 8080
 
 CMD ["siscom-consumer"]

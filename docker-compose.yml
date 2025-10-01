@@ -1,61 +1,63 @@
 version: '3.8'
 
 services:
-  tracking-consumer:
+  siscom-consumer:
     build: .
-    container_name: tracking-consumer-dev
+    container_name: siscom-consumer-dev
     volumes:
-      - ./config:/app/config:ro
-      - ./logs:/var/log/tracking-consumer
+      - ./logs:/var/log/siscom-consumer
     environment:
+      # Logging
       - RUST_LOG=info
       - RUST_BACKTRACE=1
+      # MQTT/Broker Configuration
+      - BROKER_HOST=${BROKER_HOST:-}
+      - BROKER_TOPIC=${BROKER_TOPIC:-}
+      - BROKER_TYPE=mqtt
+      - MQTT_USERNAME=${MQTT_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_CLIENT_ID=siscom-consumer-dev
+      - MQTT_KEEP_ALIVE_SECS=60
+      - MQTT_CLEAN_SESSION=true
+      - MQTT_MAX_RECONNECT_ATTEMPTS=10
+      # Kafka Configuration
+      - KAFKA_ENABLED=false
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_POSITION_TOPIC=position-topic
+      - KAFKA_NOTIFICATIONS_TOPIC=notifications-topic
+      - KAFKA_BATCH_SIZE=100
+      - KAFKA_BATCH_TIMEOUT_MS=100
+      - KAFKA_COMPRESSION=snappy
+      - KAFKA_RETRIES=3
+      # Database Configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=tracking
+      - DB_USERNAME=user
+      - DB_PASSWORD=password
+      - DB_MAX_CONNECTIONS=20
+      - DB_MIN_CONNECTIONS=5
+      - DB_CONNECTION_TIMEOUT_SECS=30
+      - DB_IDLE_TIMEOUT_SECS=600
+      # Processing Configuration
+      - PROCESSING_WORKER_THREADS=4
+      - PROCESSING_MESSAGE_BUFFER_SIZE=10000
+      - PROCESSING_BATCH_PROCESSING_SIZE=100
+      - PROCESSING_MAX_PARALLEL_DEVICES=50
+      # Logging Configuration (additional)
+      - LOGGING_FILE_PATH=/var/log/siscom-consumer/app.log
+      - LOGGING_MAX_FILE_SIZE_MB=100
+      - LOGGING_MAX_FILES=10
+      - LOGGING_JSON_FORMAT=true
     depends_on:
       - postgres
       - kafka
     networks:
-      - tracking-network
-
-  postgres:
-    image: postgres:15
-    container_name: tracking-postgres
-    environment:
-      POSTGRES_DB: tracking
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
-    networks:
-      - tracking-network
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka-kraft
-    ports:
-      - "9092:9092"
-      - "9093:9093"
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    volumes:
-      - ./kafka-data:/tmp/kraft-combined-logs
+      - siscom-network
 
 volumes:
   postgres_data:
 
 networks:
-  tracking-network:
+  siscom-network:
     driver: bridge

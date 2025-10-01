@@ -2,7 +2,6 @@ use anyhow::Result;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use serde_json;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -109,6 +108,11 @@ impl KafkaProducerService {
         Ok(buffer.len() >= self.batch_size)
     }
 
+    /// Devuelve el tamaño actual del buffer de mensajes pendientes
+    pub async fn buffer_size(&self) -> usize {
+        self.buffer.read().await.len()
+    }
+
     /// Procesa todos los mensajes del buffer
     pub async fn flush_buffer(&self) -> Result<usize> {
         let mut buffer = self.buffer.write().await;
@@ -171,35 +175,6 @@ impl KafkaProducerService {
         }
 
         Ok(())
-    }
-
-    /// Envío individual para casos urgentes
-    pub async fn send_immediate(&self, topic: &str, key: &str, payload: &str) -> Result<()> {
-        let record = FutureRecord::to(topic).key(key).payload(payload);
-
-        match self.producer.send(record, Duration::from_secs(30)).await {
-            Ok(_) => Ok(()),
-            Err((error, _)) => {
-                error!("Error enviando mensaje inmediato: {}", error);
-                Err(anyhow::anyhow!("Error enviando a Kafka: {}", error))
-            }
-        }
-    }
-
-    /// Obtiene el tamaño actual del buffer
-    pub async fn buffer_size(&self) -> usize {
-        self.buffer.read().await.len()
-    }
-
-    /// Obtiene estadísticas del productor
-    pub fn get_statistics(&self) -> Result<HashMap<String, i64>> {
-        let mut stats = HashMap::new();
-
-        // En rdkafka, las estadísticas se obtienen de forma diferente
-        // Aquí puedes implementar métricas personalizadas si las necesitas
-        stats.insert("producer_queue_size".to_string(), 0);
-
-        Ok(stats)
     }
 
     /// Verifica el estado de salud del productor

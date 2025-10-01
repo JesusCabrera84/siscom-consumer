@@ -1,7 +1,6 @@
 use anyhow::Result;
-use config::{Config, ConfigError, Environment, File};
+use config::ConfigError;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -27,6 +26,7 @@ pub struct MqttConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaConfig {
+    pub enabled: bool, // NUEVO: bandera para habilitar/deshabilitar Kafka
     pub brokers: Vec<String>,
     pub position_topic: String,
     pub notifications_topic: String,
@@ -51,8 +51,6 @@ pub struct DatabaseConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessingConfig {
-    pub poi_radius_meters: f64,
-    pub geofence_check_interval_ms: u64,
     pub worker_threads: usize,
     pub message_buffer_size: usize,
     pub batch_processing_size: usize,
@@ -69,25 +67,228 @@ pub struct LoggingConfig {
 }
 
 impl AppConfig {
-    /// Carga la configuración desde archivos y variables de entorno
+    /// Carga la configuración solo desde variables de entorno
     pub fn load() -> Result<Self, ConfigError> {
-        let mut config = Config::builder();
+        // Leer variables de entorno directamente sin prefijo
+        use std::env;
 
-        // Cargar configuración base desde archivo TOML
-        let config_path = "config/app.toml";
-        if Path::new(config_path).exists() {
-            config = config.add_source(File::with_name(config_path));
-        }
+        // MQTT Configuration
+        let _broker_type = env::var("BROKER_TYPE").unwrap_or_else(|_| "mqtt".to_string());
 
-        // Permitir override con variables de entorno
-        config = config.add_source(
-            Environment::with_prefix("TRACKING_CONSUMER")
-                .separator("_")
-                .try_parsing(true),
+        // Parse BROKER_HOST que puede venir como "host" o "host:port"
+        let broker_host_raw = env::var("BROKER_HOST")
+            .or_else(|_| env::var("MQTT_BROKER"))
+            .unwrap_or_else(|_| "localhost".to_string());
+
+        let (broker_host, broker_port) = if broker_host_raw.contains(':') {
+            // Si contiene ':', separar host y puerto
+            let parts: Vec<&str> = broker_host_raw.splitn(2, ':').collect();
+            let host = parts[0].to_string();
+            let port = parts
+                .get(1)
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(1883);
+            (host, port)
+        } else {
+            // Si no contiene ':', usar MQTT_PORT separado
+            let port = env::var("MQTT_PORT")
+                .or_else(|_| env::var("BROKER_PORT"))
+                .unwrap_or_else(|_| "1883".to_string())
+                .parse::<u16>()
+                .unwrap_or(1883);
+            (broker_host_raw, port)
+        };
+        let broker_topic = env::var("BROKER_TOPIC")
+            .or_else(|_| env::var("MQTT_TOPIC"))
+            .unwrap_or_else(|_| "tracking/data".to_string());
+
+        // Leer credenciales MQTT, convertir strings vacíos en None
+        let mqtt_username = env::var("MQTT_USERNAME").ok().and_then(|s| {
+            if s.trim().is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        });
+        let mqtt_password = env::var("MQTT_PASSWORD").ok().and_then(|s| {
+            if s.trim().is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        });
+        let mqtt_client_id =
+            env::var("MQTT_CLIENT_ID").unwrap_or_else(|_| "siscom-consumer-rust".to_string());
+        let mqtt_keep_alive_secs = env::var("MQTT_KEEP_ALIVE_SECS")
+            .unwrap_or_else(|_| "60".to_string())
+            .parse::<u64>()
+            .unwrap_or(60);
+        let mqtt_clean_session = env::var("MQTT_CLEAN_SESSION")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse::<bool>()
+            .unwrap_or(true);
+        let mqtt_max_reconnect = env::var("MQTT_MAX_RECONNECT_ATTEMPTS")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse::<u32>()
+            .unwrap_or(10);
+
+        // Kafka Configuration
+        let kafka_enabled = env::var("KAFKA_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .parse::<bool>()
+            .unwrap_or(false);
+        let kafka_brokers = env::var("KAFKA_BROKERS")
+            .unwrap_or_else(|_| "localhost:9092".to_string())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<String>>();
+        let kafka_position_topic =
+            env::var("KAFKA_POSITION_TOPIC").unwrap_or_else(|_| "position-topic".to_string());
+        let kafka_notifications_topic = env::var("KAFKA_NOTIFICATIONS_TOPIC")
+            .unwrap_or_else(|_| "notifications-topic".to_string());
+        let kafka_batch_size = env::var("KAFKA_BATCH_SIZE")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<usize>()
+            .unwrap_or(100);
+        let kafka_batch_timeout_ms = env::var("KAFKA_BATCH_TIMEOUT_MS")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<u64>()
+            .unwrap_or(100);
+        let kafka_compression = env::var("KAFKA_COMPRESSION").ok();
+        let kafka_retries = env::var("KAFKA_RETRIES")
+            .unwrap_or_else(|_| "3".to_string())
+            .parse::<i32>()
+            .unwrap_or(3);
+
+        // Database Configuration
+        let db_host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
+        let db_port = env::var("DB_PORT")
+            .unwrap_or_else(|_| "5432".to_string())
+            .parse::<u16>()
+            .unwrap_or(5432);
+        let db_database = env::var("DB_DATABASE").unwrap_or_else(|_| "tracking".to_string());
+        let db_username = env::var("DB_USERNAME").unwrap_or_else(|_| "user".to_string());
+        let db_password = env::var("DB_PASSWORD").unwrap_or_else(|_| "pass".to_string());
+        let db_max_connections = env::var("DB_MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "20".to_string())
+            .parse::<u32>()
+            .unwrap_or(20);
+        let db_min_connections = env::var("DB_MIN_CONNECTIONS")
+            .unwrap_or_else(|_| "5".to_string())
+            .parse::<u32>()
+            .unwrap_or(5);
+        let db_connection_timeout_secs = env::var("DB_CONNECTION_TIMEOUT_SECS")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse::<u64>()
+            .unwrap_or(30);
+        let db_idle_timeout_secs = env::var("DB_IDLE_TIMEOUT_SECS")
+            .unwrap_or_else(|_| "600".to_string())
+            .parse::<u64>()
+            .unwrap_or(600);
+
+        // Processing Configuration
+        let processing_worker_threads = env::var("PROCESSING_WORKER_THREADS")
+            .unwrap_or_else(|_| "4".to_string())
+            .parse::<usize>()
+            .unwrap_or(4);
+        let processing_message_buffer_size = env::var("PROCESSING_MESSAGE_BUFFER_SIZE")
+            .unwrap_or_else(|_| "10000".to_string())
+            .parse::<usize>()
+            .unwrap_or(10000);
+        let processing_batch_size = env::var("PROCESSING_BATCH_PROCESSING_SIZE")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<usize>()
+            .unwrap_or(100);
+        let processing_max_parallel = env::var("PROCESSING_MAX_PARALLEL_DEVICES")
+            .unwrap_or_else(|_| "50".to_string())
+            .parse::<usize>()
+            .unwrap_or(50);
+
+        // Logging Configuration
+        let logging_level = env::var("RUST_LOG")
+            .or_else(|_| env::var("LOGGING_LEVEL"))
+            .unwrap_or_else(|_| "info".to_string());
+        let logging_file_path = env::var("LOGGING_FILE_PATH").ok();
+        let logging_max_file_size_mb = env::var("LOGGING_MAX_FILE_SIZE_MB")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<u64>()
+            .unwrap_or(100);
+        let logging_max_files = env::var("LOGGING_MAX_FILES")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse::<u32>()
+            .unwrap_or(10);
+        let logging_json_format = env::var("LOGGING_JSON_FORMAT")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse::<bool>()
+            .unwrap_or(true);
+
+        // Log de debug para verificar credenciales (sin mostrar contraseña)
+        eprintln!("🔍 Debug MQTT Config:");
+        eprintln!("  - BROKER_HOST: {}", broker_host);
+        eprintln!("  - BROKER_PORT: {}", broker_port);
+        eprintln!(
+            "  - MQTT_USERNAME: {}",
+            mqtt_username
+                .as_ref()
+                .map(|_| "[SET]")
+                .unwrap_or("[NOT SET]")
         );
+        eprintln!(
+            "  - MQTT_PASSWORD: {}",
+            mqtt_password
+                .as_ref()
+                .map(|_| "[SET]")
+                .unwrap_or("[NOT SET]")
+        );
+        eprintln!("  - MQTT_CLIENT_ID: {}", mqtt_client_id);
 
-        let config = config.build()?;
-        config.try_deserialize()
+        Ok(Self {
+            mqtt: MqttConfig {
+                broker: broker_host,
+                port: broker_port,
+                topic: broker_topic,
+                username: mqtt_username,
+                password: mqtt_password,
+                client_id: mqtt_client_id,
+                keep_alive_secs: mqtt_keep_alive_secs,
+                clean_session: mqtt_clean_session,
+                max_reconnect_attempts: mqtt_max_reconnect,
+            },
+            kafka: KafkaConfig {
+                enabled: kafka_enabled,
+                brokers: kafka_brokers,
+                position_topic: kafka_position_topic,
+                notifications_topic: kafka_notifications_topic,
+                batch_size: kafka_batch_size,
+                batch_timeout_ms: kafka_batch_timeout_ms,
+                compression: kafka_compression,
+                retries: kafka_retries,
+            },
+            database: DatabaseConfig {
+                host: db_host,
+                port: db_port,
+                database: db_database,
+                username: db_username,
+                password: db_password,
+                max_connections: db_max_connections,
+                min_connections: db_min_connections,
+                connection_timeout_secs: db_connection_timeout_secs,
+                idle_timeout_secs: db_idle_timeout_secs,
+            },
+            processing: ProcessingConfig {
+                worker_threads: processing_worker_threads,
+                message_buffer_size: processing_message_buffer_size,
+                batch_processing_size: processing_batch_size,
+                max_parallel_devices: processing_max_parallel,
+            },
+            logging: LoggingConfig {
+                level: logging_level,
+                file_path: logging_file_path,
+                max_file_size_mb: logging_max_file_size_mb,
+                max_files: logging_max_files,
+                json_format: logging_json_format,
+            },
+        })
     }
 
     /// Obtiene la URL de conexión a PostgreSQL
@@ -113,13 +314,15 @@ impl AppConfig {
             return Err(anyhow::anyhow!("MQTT topic no puede estar vacío"));
         }
 
-        // Validar configuración Kafka
-        if self.kafka.brokers.is_empty() {
-            return Err(anyhow::anyhow!("Kafka brokers no puede estar vacío"));
-        }
+        // Validar configuración Kafka SOLO si está habilitado
+        if self.kafka.enabled {
+            if self.kafka.brokers.is_empty() {
+                return Err(anyhow::anyhow!("Kafka brokers no puede estar vacío"));
+            }
 
-        if self.kafka.position_topic.is_empty() {
-            return Err(anyhow::anyhow!("Kafka position topic no puede estar vacío"));
+            if self.kafka.position_topic.is_empty() {
+                return Err(anyhow::anyhow!("Kafka position topic no puede estar vacío"));
+            }
         }
 
         // Validar configuración de base de datos
@@ -158,6 +361,7 @@ impl AppConfig {
                 max_reconnect_attempts: 10,
             },
             kafka: KafkaConfig {
+                enabled: false, // Por defecto deshabilitado
                 brokers: vec!["localhost:9092".to_string()],
                 position_topic: "position-topic".to_string(),
                 notifications_topic: "notifications-topic".to_string(),
@@ -178,8 +382,6 @@ impl AppConfig {
                 idle_timeout_secs: 600,
             },
             processing: ProcessingConfig {
-                poi_radius_meters: 100.0,
-                geofence_check_interval_ms: 1000,
                 worker_threads: 4,
                 message_buffer_size: 10000,
                 batch_processing_size: 100,

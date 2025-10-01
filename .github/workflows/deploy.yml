@@ -19,7 +19,10 @@ jobs:
     
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-      
+    
+    - name: Install rustfmt
+      run: rustup component add rustfmt
+          
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
@@ -142,73 +145,95 @@ jobs:
           docker stop siscom-consumer || true
           docker rm siscom-consumer || true
 
-          # Crear directorio de config
-          mkdir -p /opt/siscom-consumer/config
+          # Create siscom network if it doesn't exist
+          docker network create siscom-network 2>/dev/null || true
 
-          # Crear archivo de configuración (puedes personalizar esto según tus variables)
-          cat > /opt/siscom-consumer/config/app.toml << EOF
-          [mqtt]
-          broker = "${{ vars.MQTT_BROKER }}"
-          port = ${{ vars.MQTT_PORT }}
-          topic = "${{ vars.MQTT_TOPIC }}"
-          username = "${{ vars.MQTT_USERNAME }}"
-          password = "${{ secrets.MQTT_PASSWORD }}"
-          client_id = "${{ vars.MQTT_CLIENT_ID }}"
-          keep_alive_secs = ${{ vars.MQTT_KEEP_ALIVE_SECS }}
-          clean_session = ${{ vars.MQTT_CLEAN_SESSION }}
-          max_reconnect_attempts = ${{ vars.MQTT_MAX_RECONNECT_ATTEMPTS }}
-
-          [kafka]
-          brokers = ["${{ vars.KAFKA_BROKERS }}"]
-          position_topic = "${{ vars.KAFKA_POSITION_TOPIC }}"
-          notifications_topic = "${{ vars.KAFKA_NOTIFICATIONS_TOPIC }}"
-          batch_size = ${{ vars.KAFKA_BATCH_SIZE }}
-          batch_timeout_ms = ${{ vars.KAFKA_BATCH_TIMEOUT_MS }}
-          compression = "${{ vars.KAFKA_COMPRESSION }}"
-          retries = ${{ vars.KAFKA_RETRIES }}
-
-          [database]
-          host = "${{ vars.DB_HOST }}"
-          port = ${{ vars.DB_PORT }}
-          database = "${{ vars.DB_DATABASE }}"
-          username = "${{ vars.DB_USERNAME }}"
-          password = "${{ secrets.DB_PASSWORD }}"
-          max_connections = ${{ vars.DB_MAX_CONNECTIONS }}
-          min_connections = ${{ vars.DB_MIN_CONNECTIONS }}
-          connection_timeout_secs = ${{ vars.DB_CONNECTION_TIMEOUT_SECS }}
-          idle_timeout_secs = ${{ vars.DB_IDLE_TIMEOUT_SECS }}
-
-          [processing]
-          poi_radius_meters = ${{ vars.PROCESSING_POI_RADIUS_METERS }}
-          geofence_check_interval_ms = ${{ vars.PROCESSING_GEOFENCE_CHECK_INTERVAL_MS }}
-          worker_threads = ${{ vars.PROCESSING_WORKER_THREADS }}
-          message_buffer_size = ${{ vars.PROCESSING_MESSAGE_BUFFER_SIZE }}
-          batch_processing_size = ${{ vars.PROCESSING_BATCH_PROCESSING_SIZE }}
-          max_parallel_devices = ${{ vars.PROCESSING_MAX_PARALLEL_DEVICES }}
-
-          [logging]
-          level = "${{ vars.LOGGING_LEVEL }}"
-          file_path = "${{ vars.LOGGING_FILE_PATH }}"
-          max_file_size_mb = ${{ vars.LOGGING_MAX_FILE_SIZE_MB }}
-          max_files = ${{ vars.LOGGING_MAX_FILES }}
-          json_format = ${{ vars.LOGGING_JSON_FORMAT }}
-          EOF
-
-          # Run new container
+          # Run new container with environment variables
           docker run -d \
-            --name tracking-consumer \
+            --name siscom-consumer \
             --restart unless-stopped \
-            -v /opt/tracking-consumer/config:/app/config:ro \
-            -v /var/log/tracking-consumer:/var/log/tracking-consumer \
-            --network host \
+            -v /var/log/siscom-consumer:/var/log/siscom-consumer \
+            --network siscom-network \
+            -e BROKER_HOST="${{ vars.BROKER_HOST }}" \
+            -e BROKER_TOPIC="${{ vars.BROKER_TOPIC }}" \
+            -e BROKER_TYPE="${{ vars.BROKER_TYPE }}" \
+            -e MQTT_USERNAME="${{ vars.MQTT_USERNAME }}" \
+            -e MQTT_PASSWORD="${{ vars.MQTT_PASSWORD }}" \
+            -e MQTT_CLIENT_ID="${{ vars.MQTT_CLIENT_ID }}" \
+            -e MQTT_KEEP_ALIVE_SECS="${{ vars.MQTT_KEEP_ALIVE_SECS }}" \
+            -e MQTT_CLEAN_SESSION="${{ vars.MQTT_CLEAN_SESSION }}" \
+            -e MQTT_MAX_RECONNECT_ATTEMPTS="${{ vars.MQTT_MAX_RECONNECT_ATTEMPTS }}" \
+            -e KAFKA_ENABLED="${{ vars.KAFKA_ENABLED }}" \
+            -e KAFKA_BROKERS="${{ vars.KAFKA_BROKERS }}" \
+            -e KAFKA_POSITION_TOPIC="${{ vars.KAFKA_POSITION_TOPIC }}" \
+            -e KAFKA_NOTIFICATIONS_TOPIC="${{ vars.KAFKA_NOTIFICATIONS_TOPIC }}" \
+            -e KAFKA_BATCH_SIZE="${{ vars.KAFKA_BATCH_SIZE }}" \
+            -e KAFKA_BATCH_TIMEOUT_MS="${{ vars.KAFKA_BATCH_TIMEOUT_MS }}" \
+            -e KAFKA_COMPRESSION="${{ vars.KAFKA_COMPRESSION }}" \
+            -e KAFKA_RETRIES="${{ vars.KAFKA_RETRIES }}" \
+            -e DB_HOST="${{ vars.DB_HOST }}" \
+            -e DB_PORT="${{ vars.DB_PORT }}" \
+            -e DB_DATABASE="${{ vars.DB_DATABASE }}" \
+            -e DB_USERNAME="${{ vars.DB_USERNAME }}" \
+            -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            -e DB_MAX_CONNECTIONS="${{ vars.DB_MAX_CONNECTIONS }}" \
+            -e DB_MIN_CONNECTIONS="${{ vars.DB_MIN_CONNECTIONS }}" \
+            -e DB_CONNECTION_TIMEOUT_SECS="${{ vars.DB_CONNECTION_TIMEOUT_SECS }}" \
+            -e DB_IDLE_TIMEOUT_SECS="${{ vars.DB_IDLE_TIMEOUT_SECS }}" \
+            -e PROCESSING_WORKER_THREADS="${{ vars.PROCESSING_WORKER_THREADS }}" \
+            -e PROCESSING_MESSAGE_BUFFER_SIZE="${{ vars.PROCESSING_MESSAGE_BUFFER_SIZE }}" \
+            -e PROCESSING_BATCH_PROCESSING_SIZE="${{ vars.PROCESSING_BATCH_PROCESSING_SIZE }}" \
+            -e PROCESSING_MAX_PARALLEL_DEVICES="${{ vars.PROCESSING_MAX_PARALLEL_DEVICES }}" \
+            -e RUST_LOG="${{ vars.RUST_LOG }}" \
+            -e LOGGING_FILE_PATH="${{ vars.LOGGING_FILE_PATH }}" \
+            -e LOGGING_MAX_FILE_SIZE_MB="${{ vars.LOGGING_MAX_FILE_SIZE_MB }}" \
+            -e LOGGING_MAX_FILES="${{ vars.LOGGING_MAX_FILES }}" \
+            -e LOGGING_JSON_FORMAT="${{ vars.LOGGING_JSON_FORMAT }}" \
             siscom-consumer:latest
 
-          # Show logs
-          docker logs tracking-consumer --tail 50
+          # Wait for container to start
+          echo "Esperando que el contenedor inicie..."
+          sleep 10
+
+          # Check container status
+          CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' siscom-consumer)
+          echo "Estado del contenedor: $CONTAINER_STATUS"
+
+          if [ "$CONTAINER_STATUS" != "running" ]; then
+            echo "❌ ERROR: El contenedor no está en estado 'running'"
+            echo "Logs del contenedor:"
+            docker logs siscom-consumer --tail 100
+            exit 1
+          fi
+
+          # Check if container is restarting
+          RESTART_COUNT=$(docker inspect -f '{{.RestartCount}}' siscom-consumer)
+          echo "Número de reinicios: $RESTART_COUNT"
+
+          if [ "$RESTART_COUNT" -gt "0" ]; then
+            echo "⚠️ WARNING: El contenedor se ha reiniciado $RESTART_COUNT veces"
+            echo "Logs del contenedor:"
+            docker logs siscom-consumer --tail 100
+            exit 1
+          fi
+
+          # Check for errors in logs
+          echo "Verificando logs por errores..."
+          if docker logs siscom-consumer 2>&1 | grep -i "error.*database\|failed to\|panic\|fatal"; then
+            echo "❌ ERROR: Se encontraron errores en los logs del contenedor"
+            echo "Logs completos:"
+            docker logs siscom-consumer --tail 100
+            exit 1
+          fi
+
+          # Show logs if everything is OK
+          echo "✅ Contenedor iniciado correctamente"
+          docker logs siscom-consumer --tail 50
 
   cleanup:
     runs-on: ubuntu-latest
     needs: build-and-deploy
+    environment: test
     if: always()
 
     steps:

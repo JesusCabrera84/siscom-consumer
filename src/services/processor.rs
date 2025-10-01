@@ -11,7 +11,7 @@ use crate::services::{DatabaseService, KafkaProducerService};
 #[derive(Clone)]
 pub struct MessageProcessor {
     database: Arc<DatabaseService>,
-    kafka: Arc<KafkaProducerService>,
+    kafka: Option<Arc<KafkaProducerService>>, // Puede ser None
     batch_size: usize,
     flush_interval: Duration,
 }
@@ -19,7 +19,7 @@ pub struct MessageProcessor {
 impl MessageProcessor {
     pub fn new(
         database: Arc<DatabaseService>,
-        kafka: Arc<KafkaProducerService>,
+        kafka: Option<Arc<KafkaProducerService>>,
         batch_size: usize,
         flush_interval_ms: u64,
     ) -> Self {
@@ -132,7 +132,7 @@ impl MessageProcessor {
 
         // Procesar en paralelo: BD + Kafka
         let db_future = self.process_database_batch(db_records);
-        let kafka_future = self.process_kafka_batch(kafka_messages);
+        let kafka_future = self.process_kafka_batch_internal(kafka_messages);
 
         // Ejecutar ambas operaciones en paralelo
         let (db_result, kafka_result) = tokio::join!(db_future, kafka_future);
@@ -149,10 +149,14 @@ impl MessageProcessor {
 
         match kafka_result {
             Ok(count) => {
-                debug!("✅ Enviados {} mensajes a Kafka", count);
+                if self.kafka.is_some() {
+                    debug!("✅ Enviados {} mensajes a Kafka", count);
+                }
             }
             Err(e) => {
-                error!("❌ Error enviando a Kafka: {}", e);
+                if self.kafka.is_some() {
+                    error!("❌ Error enviando a Kafka: {}", e);
+                }
             }
         }
 
@@ -178,79 +182,31 @@ impl MessageProcessor {
     }
 
     /// Procesa un lote de mensajes para Kafka
-    async fn process_kafka_batch(&self, messages: Vec<SuntechMessage>) -> Result<usize> {
-        if messages.is_empty() {
-            return Ok(0);
-        }
-
-        let mut count = 0;
-
-        // Agregar mensajes a los buffers de Kafka
-        for message in messages {
-            // Enviar a topic de posiciones
-            if let Err(e) = self.kafka.send_position(&message).await {
-                error!("Error enviando posición a Kafka: {}", e);
-            } else {
-                count += 1;
+    async fn process_kafka_batch_internal(&self, messages: Vec<SuntechMessage>) -> Result<usize> {
+        if let Some(kafka) = &self.kafka {
+            if messages.is_empty() {
+                return Ok(0);
             }
-
-            // Enviar a topic de notificaciones si es alerta
-            if message.data.msg_class == "ALERT" {
-                if let Err(e) = self.kafka.send_notification(&message).await {
-                    error!("Error enviando notificación a Kafka: {}", e);
+            let mut count = 0;
+            for message in messages {
+                if let Err(e) = kafka.send_position(&message).await {
+                    error!("Error enviando posición a Kafka: {}", e);
+                } else {
+                    count += 1;
+                }
+                if message.data.msg_class == "ALERT" {
+                    if let Err(e) = kafka.send_notification(&message).await {
+                        error!("Error enviando notificación a Kafka: {}", e);
+                    }
                 }
             }
-        }
-
-        // Forzar flush del buffer de Kafka
-        if let Err(e) = self.kafka.flush_buffer().await {
-            error!("Error haciendo flush del buffer de Kafka: {}", e);
-        }
-
-        Ok(count)
-    }
-
-    /// Procesa un mensaje individual (para casos urgentes)
-    pub async fn process_single_message(&self, message: SuntechMessage) -> Result<()> {
-        debug!(
-            "Procesando mensaje individual para dispositivo: {}",
-            message.data.device_id
-        );
-
-        // Convertir a registro de BD
-        let record = CommunicationRecord::from_suntech_message(&message)?;
-
-        // Procesar en paralelo
-        let db_future = self.database.insert_single(record);
-        let kafka_position_future = self.kafka.send_position(&message);
-        let kafka_notification_future = async {
-            if message.data.msg_class == "ALERT" {
-                self.kafka.send_notification(&message).await
-            } else {
-                Ok(())
+            if let Err(e) = kafka.flush_buffer().await {
+                error!("Error haciendo flush del buffer de Kafka: {}", e);
             }
-        };
-
-        let (db_result, kafka_pos_result, kafka_notif_result) =
-            tokio::join!(db_future, kafka_position_future, kafka_notification_future);
-
-        // Verificar resultados
-        match db_result {
-            Err(e) => error!("Error guardando mensaje individual en BD: {}", e),
-            _ => {}
+            Ok(count)
+        } else {
+            Ok(0)
         }
-
-        match kafka_pos_result {
-            Err(e) => error!("Error enviando posición individual a Kafka: {}", e),
-            _ => {}
-        }
-
-        match kafka_notif_result {
-            Err(e) => error!("Error enviando notificación individual a Kafka: {}", e),
-            _ => {}
-        }
-
-        Ok(())
     }
 
     /// Fuerza el procesamiento de todos los buffers pendientes
@@ -258,16 +214,16 @@ impl MessageProcessor {
         info!("🔄 Flushing todos los buffers...");
 
         let db_future = self.database.flush_buffer();
-        let kafka_future = self.kafka.flush_buffer();
+        let kafka_future = async {
+            if let Some(kafka) = &self.kafka {
+                kafka.flush_buffer().await.ok();
+            }
+        };
 
-        let (db_result, kafka_result) = tokio::join!(db_future, kafka_future);
+        let (db_result, _) = tokio::join!(db_future, kafka_future);
 
         if let Err(e) = db_result {
             error!("Error haciendo flush del buffer de BD: {}", e);
-        }
-
-        if let Err(e) = kafka_result {
-            error!("Error haciendo flush del buffer de Kafka: {}", e);
         }
 
         Ok(())
@@ -276,25 +232,16 @@ impl MessageProcessor {
     /// Obtiene estadísticas del procesador
     pub async fn get_statistics(&self) -> ProcessorStatistics {
         let db_buffer_size = self.database.buffer_size().await;
-        let kafka_buffer_size = self.kafka.buffer_size().await;
+        let kafka_buffer_size = if let Some(kafka) = &self.kafka {
+            (**kafka).buffer_size().await
+        } else {
+            0
+        };
 
         ProcessorStatistics {
             db_buffer_size,
             kafka_buffer_size,
             batch_size: self.batch_size,
-            flush_interval_ms: self.flush_interval.as_millis() as u64,
-        }
-    }
-
-    /// Verifica el estado de salud del procesador
-    pub async fn health_check(&self) -> ProcessorHealth {
-        let db_healthy = self.database.health_check().await.unwrap_or(false);
-        let kafka_healthy = self.kafka.health_check().await.unwrap_or(false);
-
-        ProcessorHealth {
-            database_healthy: db_healthy,
-            kafka_healthy,
-            overall_healthy: db_healthy && kafka_healthy,
         }
     }
 }
@@ -304,12 +251,4 @@ pub struct ProcessorStatistics {
     pub db_buffer_size: usize,
     pub kafka_buffer_size: usize,
     pub batch_size: usize,
-    pub flush_interval_ms: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ProcessorHealth {
-    pub database_healthy: bool,
-    pub kafka_healthy: bool,
-    pub overall_healthy: bool,
 }
