@@ -71,7 +71,7 @@ struct Services {
     database: Arc<DatabaseService>,
     kafka_producer: Option<Arc<KafkaProducerService>>, // Puede ser None si está deshabilitado
     message_processor: MessageProcessor,
-    mqtt_receiver: tokio::sync::mpsc::UnboundedReceiver<models::SuntechMessage>,
+    mqtt_receiver: tokio::sync::mpsc::UnboundedReceiver<models::DeviceMessage>,
 }
 
 /// Inicializa todos los servicios necesarios

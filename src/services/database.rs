@@ -2,7 +2,7 @@ use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::models::CommunicationRecord;
 
@@ -142,10 +142,52 @@ impl DatabaseService {
                     .push_bind(record.created_at);
             });
 
-            query_builder.build().execute(&mut **tx).await?;
+            match query_builder.build().execute(&mut **tx).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("❌ Error insertando batch en communications_suntech: {}", e);
+                    // Log de los registros problemáticos
+                    for (idx, record) in chunk.iter().enumerate() {
+                        warn!(
+                            "📝 Registro #{} - Device: {}, UUID: {}, Cell ID len: {}, LAC len: {}, MCC len: {}, MNC len: {}",
+                            idx,
+                            record.device_id,
+                            record.uuid,
+                            record.cell_id.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.lac.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.mcc.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.mnc.as_ref().map(|s| s.len()).unwrap_or(0),
+                        );
+                        // Log campos que comúnmente tienen límites VARCHAR(10)
+                        Self::log_field_if_too_long("cell_id", record.cell_id.as_deref(), 10);
+                        Self::log_field_if_too_long("lac", record.lac.as_deref(), 10);
+                        Self::log_field_if_too_long("mcc", record.mcc.as_deref(), 10);
+                        Self::log_field_if_too_long("mnc", record.mnc.as_deref(), 10);
+                        Self::log_field_if_too_long("model", record.model.as_deref(), 50);
+                        Self::log_field_if_too_long("firmware", record.firmware.as_deref(), 50);
+                        Self::log_field_if_too_long("msg_class", record.msg_class.as_deref(), 20);
+                    }
+                    return Err(e.into());
+                }
+            }
         }
 
         Ok(())
+    }
+
+    /// Helper para loguear campos que exceden el límite
+    fn log_field_if_too_long(field_name: &str, value: Option<&str>, max_len: usize) {
+        if let Some(val) = value {
+            if val.len() > max_len {
+                error!(
+                    "🚨 Campo '{}' excede límite: longitud {} > {}, valor: '{}'",
+                    field_name,
+                    val.len(),
+                    max_len,
+                    val
+                );
+            }
+        }
     }
 
     /// Fallback: Inserción por lotes usando INSERT con múltiples valores on communications_current_state
@@ -254,7 +296,37 @@ impl DatabaseService {
                 "#,
             );
 
-            query_builder.build().execute(&mut **tx).await?;
+            match query_builder.build().execute(&mut **tx).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!(
+                        "❌ Error insertando batch en communications_current_state: {}",
+                        e
+                    );
+                    // Log de los registros problemáticos
+                    for (idx, record) in chunk.iter().enumerate() {
+                        warn!(
+                            "📝 Registro #{} - Device: {}, UUID: {}, Cell ID len: {}, LAC len: {}, MCC len: {}, MNC len: {}",
+                            idx,
+                            record.device_id,
+                            record.uuid,
+                            record.cell_id.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.lac.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.mcc.as_ref().map(|s| s.len()).unwrap_or(0),
+                            record.mnc.as_ref().map(|s| s.len()).unwrap_or(0),
+                        );
+                        // Log campos que comúnmente tienen límites VARCHAR(10)
+                        Self::log_field_if_too_long("cell_id", record.cell_id.as_deref(), 10);
+                        Self::log_field_if_too_long("lac", record.lac.as_deref(), 10);
+                        Self::log_field_if_too_long("mcc", record.mcc.as_deref(), 10);
+                        Self::log_field_if_too_long("mnc", record.mnc.as_deref(), 10);
+                        Self::log_field_if_too_long("model", record.model.as_deref(), 50);
+                        Self::log_field_if_too_long("firmware", record.firmware.as_deref(), 50);
+                        Self::log_field_if_too_long("msg_class", record.msg_class.as_deref(), 20);
+                    }
+                    return Err(e.into());
+                }
+            }
         }
 
         Ok(())

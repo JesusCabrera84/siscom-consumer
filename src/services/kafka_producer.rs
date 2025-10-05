@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::models::SuntechMessage;
+use crate::models::DeviceMessage;
 
 #[derive(Clone)]
 pub struct KafkaProducerService {
@@ -67,7 +67,7 @@ impl KafkaProducerService {
     }
 
     /// Envía un mensaje de posición a Kafka
-    pub async fn send_position(&self, message: &SuntechMessage) -> Result<()> {
+    pub async fn send_position(&self, message: &DeviceMessage) -> Result<()> {
         let payload = serde_json::to_string(message)?;
         let key = message.data.device_id.clone();
 
@@ -82,7 +82,7 @@ impl KafkaProducerService {
     }
 
     /// Envía una notificación a Kafka (alertas, etc.)
-    pub async fn send_notification(&self, message: &SuntechMessage) -> Result<()> {
+    pub async fn send_notification(&self, message: &DeviceMessage) -> Result<()> {
         // Solo enviar si es una alerta
         if message.data.msg_class == "ALERT" {
             let payload = serde_json::to_string(message)?;

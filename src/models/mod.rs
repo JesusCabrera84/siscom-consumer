@@ -1,5 +1,5 @@
 pub mod communication_record;
-pub mod suntech_message;
+pub mod device_message;
 
 pub use communication_record::*;
-pub use suntech_message::*;
+pub use device_message::*;

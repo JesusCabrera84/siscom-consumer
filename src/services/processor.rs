@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tracing::{debug, error, info};
 
-use crate::models::{CommunicationRecord, SuntechMessage};
+use crate::models::{CommunicationRecord, DeviceMessage};
 use crate::services::{DatabaseService, KafkaProducerService};
 
 #[derive(Clone)]
@@ -34,12 +34,12 @@ impl MessageProcessor {
     /// Inicia el procesador principal que consume mensajes del canal MQTT
     pub async fn start_processing(
         &self,
-        mut message_receiver: mpsc::UnboundedReceiver<SuntechMessage>,
+        mut message_receiver: mpsc::UnboundedReceiver<DeviceMessage>,
     ) -> Result<()> {
         info!("🚀 Iniciando procesador de mensajes...");
 
         // Canal interno para batch processing
-        let (batch_sender, batch_receiver) = mpsc::channel::<SuntechMessage>(self.batch_size * 2);
+        let (batch_sender, batch_receiver) = mpsc::channel::<DeviceMessage>(self.batch_size * 2);
 
         // Task para recibir mensajes del MQTT y enviar al batch processor
         let sender_clone = batch_sender.clone();
@@ -60,7 +60,7 @@ impl MessageProcessor {
     /// Loop principal de procesamiento por lotes
     async fn batch_processing_loop(
         &self,
-        mut receiver: mpsc::Receiver<SuntechMessage>,
+        mut receiver: mpsc::Receiver<DeviceMessage>,
     ) -> Result<()> {
         let mut batch = Vec::with_capacity(self.batch_size);
         let mut flush_timer = time::interval(self.flush_interval);
@@ -102,7 +102,7 @@ impl MessageProcessor {
     }
 
     /// Procesa un lote de mensajes
-    async fn process_batch(&self, batch: &mut Vec<SuntechMessage>) {
+    async fn process_batch(&self, batch: &mut Vec<DeviceMessage>) {
         if batch.is_empty() {
             return;
         }
@@ -116,12 +116,15 @@ impl MessageProcessor {
 
         for message in batch.iter() {
             // Preparar registro para BD
-            match CommunicationRecord::from_suntech_message(message) {
+            match CommunicationRecord::from_device_message(message) {
                 Ok(record) => {
                     db_records.push(record);
                 }
                 Err(e) => {
-                    error!("Error convirtiendo mensaje a registro de BD: {}", e);
+                    error!(
+                        "Error convirtiendo mensaje a registro de BD: {} | Device: {}, UUID: {}",
+                        e, message.data.device_id, message.uuid
+                    );
                     continue;
                 }
             }
@@ -182,7 +185,7 @@ impl MessageProcessor {
     }
 
     /// Procesa un lote de mensajes para Kafka
-    async fn process_kafka_batch_internal(&self, messages: Vec<SuntechMessage>) -> Result<usize> {
+    async fn process_kafka_batch_internal(&self, messages: Vec<DeviceMessage>) -> Result<usize> {
         if let Some(kafka) = &self.kafka {
             if messages.is_empty() {
                 return Ok(0);

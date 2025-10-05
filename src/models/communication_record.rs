@@ -2,8 +2,9 @@ use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::net::IpAddr;
+use tracing::warn;
 
-use super::SuntechMessage;
+use super::DeviceMessage;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct CommunicationRecord {
@@ -49,8 +50,17 @@ pub struct CommunicationRecord {
 }
 
 impl CommunicationRecord {
-    /// Convierte un SuntechMessage a un CommunicationRecord para insertar en la BD
-    pub fn from_suntech_message(msg: &SuntechMessage) -> anyhow::Result<Self> {
+    /// Convierte un DeviceMessage a un CommunicationRecord para insertar en la BD
+    pub fn from_device_message(msg: &DeviceMessage) -> anyhow::Result<Self> {
+        // Validación preventiva de longitudes de campos
+        Self::validate_field_length("cell_id", &msg.data.cell_id, 10, &msg.data.device_id);
+        Self::validate_field_length("lac", &msg.data.lac, 10, &msg.data.device_id);
+        Self::validate_field_length("mcc", &msg.data.mcc, 10, &msg.data.device_id);
+        Self::validate_field_length("mnc", &msg.data.mnc, 10, &msg.data.device_id);
+        Self::validate_field_length("model", &msg.data.model, 50, &msg.data.device_id);
+        Self::validate_field_length("firmware", &msg.data.firmware, 50, &msg.data.device_id);
+        Self::validate_field_length("msg_class", &msg.data.msg_class, 20, &msg.data.device_id);
+
         let gps_datetime = if !msg.data.gps_datetime.is_empty() {
             chrono::NaiveDateTime::parse_from_str(&msg.data.gps_datetime, "%Y-%m-%d %H:%M:%S").ok()
         } else {
@@ -126,5 +136,19 @@ impl CommunicationRecord {
             return None;
         }
         s.parse().ok()
+    }
+
+    // Validación de longitud de campos
+    fn validate_field_length(field_name: &str, value: &str, max_len: usize, device_id: &str) {
+        if value.len() > max_len {
+            warn!(
+                "⚠️ Campo '{}' excede límite en Device {}: longitud {} > {}, valor truncado: '{}'",
+                field_name,
+                device_id,
+                value.len(),
+                max_len,
+                &value[..max_len.min(value.len())]
+            );
+        }
     }
 }

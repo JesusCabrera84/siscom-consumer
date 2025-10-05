@@ -7,13 +7,13 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::models::SuntechMessage;
+use crate::models::DeviceMessage;
 
 #[derive(Clone)]
 pub struct MqttConsumerService {
     client: AsyncClient,
     event_loop: Arc<tokio::sync::Mutex<EventLoop>>,
-    message_sender: mpsc::UnboundedSender<SuntechMessage>,
+    message_sender: mpsc::UnboundedSender<DeviceMessage>,
 }
 
 impl MqttConsumerService {
@@ -27,7 +27,7 @@ impl MqttConsumerService {
         keep_alive_secs: u64,
         clean_session: bool,
         buffer_size: usize,
-    ) -> Result<(Self, mpsc::UnboundedReceiver<SuntechMessage>)> {
+    ) -> Result<(Self, mpsc::UnboundedReceiver<DeviceMessage>)> {
         // Configurar opciones MQTT para máximo rendimiento
         let mut mqttoptions = MqttOptions::new(client_id, broker, port);
 
@@ -139,7 +139,7 @@ impl MqttConsumerService {
     async fn process_message(
         payload: Bytes,
         topic: String,
-        sender: mpsc::UnboundedSender<SuntechMessage>,
+        sender: mpsc::UnboundedSender<DeviceMessage>,
     ) -> Result<()> {
         // Convertir payload a string
         let message_str = String::from_utf8_lossy(&payload);
@@ -150,21 +150,22 @@ impl MqttConsumerService {
             payload.len()
         );
 
-        // Intentar parsear como JSON de Suntech
-        match serde_json::from_str::<SuntechMessage>(&message_str) {
-            Ok(suntech_message) => {
+        // Intentar parsear como JSON de dispositivo
+        match serde_json::from_str::<DeviceMessage>(&message_str) {
+            Ok(device_message) => {
+                let manufacturer = device_message.get_manufacturer();
                 debug!(
-                    "✅ Mensaje Suntech parseado para dispositivo: {}",
-                    suntech_message.data.device_id
+                    "✅ Mensaje {:?} parseado para dispositivo: {}",
+                    manufacturer, device_message.data.device_id
                 );
 
                 // Enviar mensaje procesado al canal
-                if let Err(e) = sender.send(suntech_message) {
+                if let Err(e) = sender.send(device_message) {
                     error!("Error enviando mensaje al canal de procesamiento: {}", e);
                 }
             }
             Err(e) => {
-                error!("❌ Error parseando JSON de Suntech: {}", e);
+                error!("❌ Error parseando JSON de dispositivo: {}", e);
                 error!("Payload recibido: {}", message_str);
                 // No retornar error para que el loop continúe
             }
