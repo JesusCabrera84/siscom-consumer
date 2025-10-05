@@ -36,6 +36,8 @@ pub struct DeviceData {
     pub altitude: String,
     #[serde(rename = "BACKUP_BATTERY_VOLTAGE", default)]
     pub backup_battery_voltage: String,
+    #[serde(rename = "PERCENT_BACKUP", default)]
+    pub backup_battery_percent: String,
     #[serde(rename = "CELL_ID", default)]
     pub cell_id: String,
     #[serde(rename = "COURSE", default)]

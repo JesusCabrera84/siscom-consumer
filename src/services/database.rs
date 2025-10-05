@@ -2,16 +2,15 @@ use anyhow::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
-use crate::models::CommunicationRecord;
+use crate::models::{CommunicationRecord, Manufacturer};
 
 #[derive(Debug, Clone)]
 pub struct DatabaseService {
     pool: PgPool,
     // Buffer para batch inserts
     buffer: Arc<RwLock<Vec<CommunicationRecord>>>,
-    batch_size: usize,
 }
 
 impl DatabaseService {
@@ -32,20 +31,39 @@ impl DatabaseService {
         Ok(Self {
             pool,
             buffer: Arc::new(RwLock::new(Vec::with_capacity(batch_size))),
-            batch_size,
         })
     }
 
-    /// Agrega un registro al buffer para procesamiento por lotes
-    pub async fn add_to_buffer(&self, record: CommunicationRecord) -> Result<bool> {
-        let mut buffer = self.buffer.write().await;
-        buffer.push(record);
+    /// Inserta registros agrupados por fabricante
+    pub async fn insert_records_by_manufacturer(
+        &self,
+        suntech_records: Vec<CommunicationRecord>,
+        queclink_records: Vec<CommunicationRecord>,
+    ) -> Result<usize> {
+        let mut total = 0;
 
-        // Retorna true si el buffer está lleno y necesita ser procesado
-        Ok(buffer.len() >= self.batch_size)
+        // Insertar registros Suntech si hay
+        if !suntech_records.is_empty() {
+            let count = suntech_records.len();
+            debug!("📦 Insertando {} registros Suntech", count);
+            self.batch_insert(suntech_records, Manufacturer::Suntech)
+                .await?;
+            total += count;
+        }
+
+        // Insertar registros Queclink si hay
+        if !queclink_records.is_empty() {
+            let count = queclink_records.len();
+            debug!("📦 Insertando {} registros Queclink", count);
+            self.batch_insert(queclink_records, Manufacturer::Queclink)
+                .await?;
+            total += count;
+        }
+
+        Ok(total)
     }
 
-    /// Procesa todos los registros del buffer usando COPY para máximo rendimiento
+    /// Procesa todos los registros del buffer agrupándolos por fabricante
     pub async fn flush_buffer(&self) -> Result<usize> {
         let mut buffer = self.buffer.write().await;
         if buffer.is_empty() {
@@ -56,19 +74,46 @@ impl DatabaseService {
         let records = std::mem::take(&mut *buffer);
         drop(buffer); // Liberar el lock lo antes posible
 
-        self.batch_insert(records).await?;
+        // Agrupar por fabricante
+        let mut suntech_records = Vec::new();
+        let mut queclink_records = Vec::new();
+
+        for record in records {
+            match record.manufacturer {
+                Some(Manufacturer::Suntech) => suntech_records.push(record),
+                Some(Manufacturer::Queclink) => queclink_records.push(record),
+                None => {
+                    warn!("Registro sin fabricante asignado, usando Suntech por defecto");
+                    suntech_records.push(record);
+                }
+            }
+        }
+
+        // Insertar usando el método que agrupa por fabricante
+        self.insert_records_by_manufacturer(suntech_records, queclink_records)
+            .await?;
         Ok(count)
     }
 
     /// Inserción por lotes usando INSERT múltiple (simplificado)
-    async fn batch_insert(&self, records: Vec<CommunicationRecord>) -> Result<()> {
+    async fn batch_insert(
+        &self,
+        records: Vec<CommunicationRecord>,
+        manufacturer: Manufacturer,
+    ) -> Result<()> {
         if records.is_empty() {
             return Ok(());
         }
 
+        let table_name = match manufacturer {
+            Manufacturer::Suntech => "communications_suntech",
+            Manufacturer::Queclink => "communications_queclink",
+        };
+
         let mut tx = self.pool.begin().await?;
 
-        self.fallback_batch_insert(&mut tx, records.clone()).await?;
+        self.fallback_batch_insert(&mut tx, records.clone(), table_name)
+            .await?;
 
         // Update current state
 
@@ -84,27 +129,31 @@ impl DatabaseService {
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         records: Vec<CommunicationRecord>,
+        table_name: &str,
     ) -> Result<()> {
         // Dividir en chunks más pequeños para evitar límites de PostgreSQL
         const CHUNK_SIZE: usize = 100;
 
         for chunk in records.chunks(CHUNK_SIZE) {
-            let mut query_builder = sqlx::QueryBuilder::new(
-                "INSERT INTO communications_suntech (
-                    uuid, device_id, backup_battery_voltage, cell_id, course, delivery_type,
+            let query = format!(
+                "INSERT INTO {} (
+                    uuid, device_id, backup_battery_voltage, backup_battery_percent, cell_id, course, delivery_type,
                     engine_status, firmware, fix_status, gps_datetime, gps_epoch, idle_time,
                     lac, latitude, longitude, main_battery_voltage, mcc, mnc, model,
-                    msg_class, msg_counter, network_status, odometer, rx_lvl, satellites,
+                    msg_class, msg_counter, alert_type, network_status, odometer, rx_lvl, satellites,
                     speed, speed_time, total_distance, trip_distance, trip_hourmeter,
                     bytes_count, client_ip, client_port, decoded_epoch, received_epoch,
                     raw_message, received_at, created_at
                 ) ",
+                table_name
             );
+            let mut query_builder = sqlx::QueryBuilder::new(query);
 
             query_builder.push_values(chunk, |mut b, record| {
                 b.push_bind(&record.uuid)
                     .push_bind(&record.device_id)
                     .push_bind(record.backup_battery_voltage)
+                    .push_bind(record.backup_battery_percent)
                     .push_bind(&record.cell_id)
                     .push_bind(record.course)
                     .push_bind(&record.delivery_type)
@@ -123,6 +172,7 @@ impl DatabaseService {
                     .push_bind(&record.model)
                     .push_bind(&record.msg_class)
                     .push_bind(record.msg_counter)
+                    .push_bind(&record.alert_type)
                     .push_bind(&record.network_status)
                     .push_bind(record.odometer)
                     .push_bind(record.rx_lvl)
@@ -133,7 +183,7 @@ impl DatabaseService {
                     .push_bind(record.trip_distance)
                     .push_bind(record.trip_hourmeter)
                     .push_bind(record.bytes_count)
-                    .push_bind(None::<String>)
+                    .push_bind(&record.client_ip)
                     .push_bind(record.client_port)
                     .push_bind(record.decoded_epoch)
                     .push_bind(record.received_epoch)
@@ -145,7 +195,7 @@ impl DatabaseService {
             match query_builder.build().execute(&mut **tx).await {
                 Ok(_) => {}
                 Err(e) => {
-                    error!("❌ Error insertando batch en communications_suntech: {}", e);
+                    error!("❌ Error insertando batch en {}: {}", table_name, e);
                     // Log de los registros problemáticos
                     for (idx, record) in chunk.iter().enumerate() {
                         warn!(
@@ -202,10 +252,10 @@ impl DatabaseService {
         for chunk in records.chunks(CHUNK_SIZE) {
             let mut query_builder = sqlx::QueryBuilder::new(
                 r#"INSERT INTO communications_current_state (
-                    uuid, device_id, backup_battery_voltage, cell_id, course, delivery_type,
+                    uuid, device_id, backup_battery_voltage, backup_battery_percent, cell_id, course, delivery_type,
                     engine_status, firmware, fix_status, gps_datetime, gps_epoch, idle_time,
                     lac, latitude, longitude, main_battery_voltage, mcc, mnc, model,
-                    msg_class, msg_counter, network_status, odometer, rx_lvl, satellites,
+                    msg_class, msg_counter, alert_type, network_status, odometer, rx_lvl, satellites,
                     speed, speed_time, total_distance, trip_distance, trip_hourmeter,
                     bytes_count, client_ip, client_port, decoded_epoch, received_epoch,
                     raw_message, received_at, created_at
@@ -216,6 +266,7 @@ impl DatabaseService {
                 b.push_bind(&record.uuid)
                     .push_bind(&record.device_id)
                     .push_bind(record.backup_battery_voltage)
+                    .push_bind(record.backup_battery_percent)
                     .push_bind(&record.cell_id)
                     .push_bind(record.course)
                     .push_bind(&record.delivery_type)
@@ -234,6 +285,7 @@ impl DatabaseService {
                     .push_bind(&record.model)
                     .push_bind(&record.msg_class)
                     .push_bind(record.msg_counter)
+                    .push_bind(&record.alert_type)
                     .push_bind(&record.network_status)
                     .push_bind(record.odometer)
                     .push_bind(record.rx_lvl)
@@ -244,7 +296,7 @@ impl DatabaseService {
                     .push_bind(record.trip_distance)
                     .push_bind(record.trip_hourmeter)
                     .push_bind(record.bytes_count)
-                    .push_bind(None::<String>)
+                    .push_bind(&record.client_ip)
                     .push_bind(record.client_port)
                     .push_bind(record.decoded_epoch)
                     .push_bind(record.received_epoch)
@@ -258,6 +310,7 @@ impl DatabaseService {
                 ON CONFLICT (device_id) DO UPDATE SET
                     uuid = EXCLUDED.uuid,
                     backup_battery_voltage = EXCLUDED.backup_battery_voltage,
+                    backup_battery_percent = EXCLUDED.backup_battery_percent,
                     cell_id = EXCLUDED.cell_id,
                     course = EXCLUDED.course,
                     delivery_type = EXCLUDED.delivery_type,
@@ -276,6 +329,7 @@ impl DatabaseService {
                     model = EXCLUDED.model,
                     msg_class = EXCLUDED.msg_class,
                     msg_counter = EXCLUDED.msg_counter,
+                    alert_type = EXCLUDED.alert_type,
                     network_status = EXCLUDED.network_status,
                     odometer = EXCLUDED.odometer,
                     rx_lvl = EXCLUDED.rx_lvl,

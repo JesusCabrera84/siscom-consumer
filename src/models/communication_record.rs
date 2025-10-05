@@ -1,17 +1,20 @@
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::net::IpAddr;
 use tracing::warn;
 
-use super::DeviceMessage;
+use super::{DeviceMessage, Manufacturer};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct CommunicationRecord {
     pub id: Option<i64>,
     pub uuid: String,
     pub device_id: String,
+    #[serde(skip)]
+    #[sqlx(skip)]
+    pub manufacturer: Option<Manufacturer>,
     pub backup_battery_voltage: Option<f64>,
+    pub backup_battery_percent: Option<f64>,
     pub cell_id: Option<String>,
     pub course: Option<f64>,
     pub delivery_type: Option<String>,
@@ -30,6 +33,7 @@ pub struct CommunicationRecord {
     pub model: Option<String>,
     pub msg_class: Option<String>,
     pub msg_counter: Option<i32>,
+    pub alert_type: Option<String>,
     pub network_status: Option<String>,
     pub odometer: Option<i64>,
     pub rx_lvl: Option<i32>,
@@ -40,7 +44,7 @@ pub struct CommunicationRecord {
     pub trip_distance: Option<i64>,
     pub trip_hourmeter: Option<i32>,
     pub bytes_count: Option<i32>,
-    pub client_ip: Option<IpAddr>,
+    pub client_ip: Option<String>,
     pub client_port: Option<i32>,
     pub decoded_epoch: Option<i64>,
     pub received_epoch: Option<i64>,
@@ -67,7 +71,11 @@ impl CommunicationRecord {
             None
         };
 
-        let client_ip = msg.metadata.client_ip.parse::<IpAddr>().ok();
+        let client_ip = if msg.metadata.client_ip.is_empty() {
+            None
+        } else {
+            Some(msg.metadata.client_ip.clone())
+        };
 
         let now = Utc::now().naive_utc();
 
@@ -75,7 +83,9 @@ impl CommunicationRecord {
             id: None,
             uuid: msg.uuid.clone(),
             device_id: msg.data.device_id.clone(),
+            manufacturer: Some(msg.get_manufacturer()),
             backup_battery_voltage: Self::parse_f64(&msg.data.backup_battery_voltage),
+            backup_battery_percent: Self::parse_f64(&msg.data.backup_battery_percent),
             cell_id: Some(msg.data.cell_id.clone()),
             course: Self::parse_f64(&msg.data.course),
             delivery_type: Some(msg.data.delivery_type.clone()),
@@ -94,6 +104,11 @@ impl CommunicationRecord {
             model: Some(msg.data.model.clone()),
             msg_class: Some(msg.data.msg_class.clone()),
             msg_counter: Self::parse_i32(&msg.data.msg_counter),
+            alert_type: if msg.data.alert.is_empty() {
+                None
+            } else {
+                Some(msg.data.alert.clone())
+            },
             network_status: Some(msg.data.network_status.clone()),
             odometer: Self::parse_i64(&msg.data.odometer),
             rx_lvl: Self::parse_i32(&msg.data.rx_lvl),

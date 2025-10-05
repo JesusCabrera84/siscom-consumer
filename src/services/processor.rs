@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tracing::{debug, error, info};
 
-use crate::models::{CommunicationRecord, DeviceMessage};
+use crate::models::{CommunicationRecord, DeviceMessage, Manufacturer};
 use crate::services::{DatabaseService, KafkaProducerService};
 
 #[derive(Clone)]
@@ -110,20 +110,27 @@ impl MessageProcessor {
         let batch_size = batch.len();
         debug!("📦 Procesando lote de {} mensajes", batch_size);
 
-        // Convertir mensajes a registros de BD
-        let mut db_records = Vec::with_capacity(batch_size);
+        // Convertir mensajes a registros de BD, agrupando por fabricante
+        let mut suntech_records = Vec::new();
+        let mut queclink_records = Vec::new();
         let mut kafka_messages = Vec::new();
 
         for message in batch.iter() {
+            let manufacturer = message.get_manufacturer();
+
             // Preparar registro para BD
             match CommunicationRecord::from_device_message(message) {
                 Ok(record) => {
-                    db_records.push(record);
+                    // Agrupar por fabricante
+                    match manufacturer {
+                        Manufacturer::Suntech => suntech_records.push(record),
+                        Manufacturer::Queclink => queclink_records.push(record),
+                    }
                 }
                 Err(e) => {
                     error!(
-                        "Error convirtiendo mensaje a registro de BD: {} | Device: {}, UUID: {}",
-                        e, message.data.device_id, message.uuid
+                        "Error convirtiendo mensaje a registro de BD: {} | Device: {}, UUID: {}, Manufacturer: {:?}",
+                        e, message.data.device_id, message.uuid, manufacturer
                     );
                     continue;
                 }
@@ -133,8 +140,15 @@ impl MessageProcessor {
             kafka_messages.push(message.clone());
         }
 
+        debug!(
+            "📊 Agrupados: {} Suntech, {} Queclink",
+            suntech_records.len(),
+            queclink_records.len()
+        );
+
         // Procesar en paralelo: BD + Kafka
-        let db_future = self.process_database_batch(db_records);
+        let db_future =
+            self.process_database_batch_by_manufacturer(suntech_records, queclink_records);
         let kafka_future = self.process_kafka_batch_internal(kafka_messages);
 
         // Ejecutar ambas operaciones en paralelo
@@ -167,21 +181,16 @@ impl MessageProcessor {
         batch.clear();
     }
 
-    /// Procesa un lote de registros para la base de datos
-    async fn process_database_batch(&self, records: Vec<CommunicationRecord>) -> Result<usize> {
-        if records.is_empty() {
-            return Ok(0);
-        }
-
-        // Agregar todos los registros al buffer de la BD
-        for record in records {
-            if let Err(e) = self.database.add_to_buffer(record).await {
-                error!("Error agregando registro al buffer de BD: {}", e);
-            }
-        }
-
-        // Forzar flush del buffer
-        self.database.flush_buffer().await
+    /// Procesa un lote de registros para la base de datos, agrupados por fabricante
+    async fn process_database_batch_by_manufacturer(
+        &self,
+        suntech_records: Vec<CommunicationRecord>,
+        queclink_records: Vec<CommunicationRecord>,
+    ) -> Result<usize> {
+        // Insertar registros directamente usando el método que separa por fabricante
+        self.database
+            .insert_records_by_manufacturer(suntech_records, queclink_records)
+            .await
     }
 
     /// Procesa un lote de mensajes para Kafka
