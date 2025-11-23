@@ -307,7 +307,7 @@ impl DatabaseService {
 
             query_builder.push(
                 r#"
-                ON CONFLICT (device_id) DO UPDATE SET
+                ON CONFLICT (device_id, msg_class) DO UPDATE SET
                     uuid = EXCLUDED.uuid,
                     backup_battery_voltage = EXCLUDED.backup_battery_voltage,
                     backup_battery_percent = EXCLUDED.backup_battery_percent,
