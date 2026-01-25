@@ -1,10 +1,44 @@
+# Rust build artifacts
+target/
 Cargo.lock
-.git
-.gitignore
-target
-logs
-*.log
-*.tmp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
-node_modules
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Environment files
 .env
+
+# Documentation
+README.md
+.env.template
+
+# Docker files
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github/
+
+# Development files
+Makefile
+scripts/
+
+# Temporary files
+tmp/
+temp/

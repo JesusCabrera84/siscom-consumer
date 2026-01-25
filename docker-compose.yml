@@ -1,6 +1,9 @@
 version: '3.8'
 
 services:
+  # ===================================================================
+  # MAIN APPLICATION
+  # ===================================================================
   siscom-consumer:
     build: .
     container_name: siscom-consumer-dev
@@ -8,27 +11,28 @@ services:
       - ./logs:/var/log/siscom-consumer
     environment:
       # Logging
-      - RUST_LOG=info
+      - RUST_LOG=${RUST_LOG:-info}
       - RUST_BACKTRACE=1
-      # MQTT/Broker Configuration
-      - BROKER_HOST=${BROKER_HOST:-}
-      - BROKER_TOPIC=${BROKER_TOPIC:-}
-      - BROKER_TYPE=mqtt
+
+      # Broker Configuration (choose one mode)
+      - BROKER_TYPE=${BROKER_TYPE:-mqtt}
+      - BROKER_HOST=${BROKER_HOST:-mosquitto:1883}
+      - BROKER_TOPIC=${BROKER_TOPIC:-siscom-messages}
+
+      # MQTT Configuration (when BROKER_TYPE=mqtt)
       - MQTT_USERNAME=${MQTT_USERNAME:-}
       - MQTT_PASSWORD=${MQTT_PASSWORD:-}
       - MQTT_CLIENT_ID=siscom-consumer-dev
       - MQTT_KEEP_ALIVE_SECS=60
       - MQTT_CLEAN_SESSION=true
       - MQTT_MAX_RECONNECT_ATTEMPTS=10
-      # Kafka Configuration
-      - KAFKA_ENABLED=false
-      - KAFKA_BROKERS=kafka:9092
-      - KAFKA_POSITION_TOPIC=position-topic
-      - KAFKA_NOTIFICATIONS_TOPIC=notifications-topic
+
+      # Kafka Configuration (when BROKER_TYPE=kafka)
       - KAFKA_BATCH_SIZE=100
       - KAFKA_BATCH_TIMEOUT_MS=100
       - KAFKA_COMPRESSION=snappy
       - KAFKA_RETRIES=3
+
       # Database Configuration
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -39,24 +43,109 @@ services:
       - DB_MIN_CONNECTIONS=5
       - DB_CONNECTION_TIMEOUT_SECS=30
       - DB_IDLE_TIMEOUT_SECS=600
+
       # Processing Configuration
       - PROCESSING_WORKER_THREADS=4
       - PROCESSING_MESSAGE_BUFFER_SIZE=10000
       - PROCESSING_BATCH_PROCESSING_SIZE=100
       - PROCESSING_MAX_PARALLEL_DEVICES=50
-      # Logging Configuration (additional)
+
+      # Logging Configuration
       - LOGGING_FILE_PATH=/var/log/siscom-consumer/app.log
       - LOGGING_MAX_FILE_SIZE_MB=100
       - LOGGING_MAX_FILES=10
       - LOGGING_JSON_FORMAT=true
     depends_on:
       - postgres
+    profiles:
+      - mqtt
       - kafka
     networks:
       - siscom-network
 
+  # ===================================================================
+  # INFRASTRUCTURE SERVICES
+  # ===================================================================
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: siscom-postgres
+    environment:
+      - POSTGRES_DB=tracking
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - siscom-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d tracking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: siscom-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - siscom-network
+    profiles:
+      - mqtt
+
+  # Kafka (Redpanda)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.3
+    container_name: siscom-redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr=INTERNAL://redpanda:9092,EXTERNAL://localhost:19092
+      - --pandaproxy-addr=INTERNAL://0.0.0.0:8082,EXTERNAL://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=INTERNAL://redpanda:8082,EXTERNAL://localhost:18082
+      - --schema-registry-addr=INTERNAL://0.0.0.0:8081,EXTERNAL://0.0.0.0:18081
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+    ports:
+      - "19092:19092"  # Kafka external
+      - "18082:18082"  # HTTP Proxy external
+      - "18081:18081"  # Schema Registry external
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - siscom-network
+    profiles:
+      - kafka
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ===================================================================
+# VOLUMES & NETWORKS
+# ===================================================================
+
 volumes:
   postgres_data:
+  redpanda_data:
 
 networks:
   siscom-network:

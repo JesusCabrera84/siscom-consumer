@@ -7,9 +7,10 @@ mod config;
 mod errors;
 mod models;
 mod services;
+mod boot;
 
 use config::AppConfig;
-use services::{DatabaseService, KafkaProducerService, MessageProcessor, MqttConsumerService};
+use services::{DatabaseService, KafkaConsumerService, MessageConsumer, MessageProcessor};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,9 +21,11 @@ async fn main() -> Result<()> {
         .init();
 
     info!(
-        "🚀 Iniciando Tracking Consumer Rust v{}",
+        "🚀 Iniciando Siscom Consumer Rust v{}",
         env!("CARGO_PKG_VERSION")
     );
+
+    boot::print_banner();
 
     // Load configuration
     let config = match AppConfig::load() {
@@ -38,6 +41,7 @@ async fn main() -> Result<()> {
             AppConfig::default_dev()
         }
     };
+    info!("✅ Configuración cargada y validada");
 
     // Setup graceful shutdown
     let shutdown_signal = setup_shutdown_handler();
@@ -67,11 +71,10 @@ async fn main() -> Result<()> {
 
 /// Estructura que contiene todos los servicios inicializados
 struct Services {
-    mqtt_consumer: MqttConsumerService,
+    message_consumer: Box<dyn MessageConsumer>,
     database: Arc<DatabaseService>,
-    kafka_producer: Option<Arc<KafkaProducerService>>, // Puede ser None si está deshabilitado
     message_processor: MessageProcessor,
-    mqtt_receiver: tokio::sync::mpsc::UnboundedReceiver<models::DeviceMessage>,
+    message_receiver: tokio::sync::mpsc::UnboundedReceiver<models::DeviceMessage>,
 }
 
 /// Inicializa todos los servicios necesarios
@@ -89,48 +92,27 @@ async fn initialize_services(config: &AppConfig) -> Result<Services> {
         .await?,
     );
 
-    // Inicializar Kafka solo si está habilitado
-    let kafka_producer = if config.kafka.enabled {
-        Some(Arc::new(KafkaProducerService::new(
-            &config.kafka.brokers,
-            config.kafka.position_topic.clone(),
-            config.kafka.notifications_topic.clone(),
-            config.kafka.batch_size,
-            config.kafka.compression.as_deref(),
-            config.kafka.retries,
-        )?))
-    } else {
-        None
-    };
+    // Inicializar Kafka consumer
+    info!("📡 Inicializando Kafka consumer...");
+    let message_consumer: Box<dyn MessageConsumer> = Box::new(
+        KafkaConsumerService::new(&config.broker)?
+    );
 
-    // Initialize MQTT consumer
-    info!("📥 Configurando MQTT consumer...");
-    let (mqtt_consumer, mqtt_receiver) = MqttConsumerService::new(
-        &config.mqtt.broker,
-        config.mqtt.port,
-        &config.mqtt.topic,
-        config.mqtt.username.as_deref(),
-        config.mqtt.password.as_deref(),
-        &config.mqtt.client_id,
-        config.mqtt.keep_alive_secs,
-        config.mqtt.clean_session,
-        config.processing.message_buffer_size,
-    )?;
+    // Iniciar el consumo y obtener el receiver
+    let message_receiver = message_consumer.start_consuming().await?;
 
-    // Inicializar el procesador de mensajes, pasando Option<Arc<KafkaProducerService>>
+    // Inicializar el procesador de mensajes
     let message_processor = MessageProcessor::new(
         database.clone(),
-        kafka_producer.clone(),
         config.processing.batch_processing_size,
-        config.kafka.batch_timeout_ms,
+        5000, // 5 segundos de intervalo de flush
     );
 
     Ok(Services {
-        mqtt_consumer,
+        message_consumer,
         database,
-        kafka_producer,
         message_processor,
-        mqtt_receiver,
+        message_receiver,
     })
 }
 
@@ -141,44 +123,30 @@ async fn start_processing_loop(
 ) -> Result<()> {
     info!("🚀 Iniciando loop principal de procesamiento...");
 
-    // Start MQTT consumer in background
-    let mqtt_consumer = services.mqtt_consumer.clone();
-    let mqtt_task = tokio::spawn(async move {
-        if let Err(e) = mqtt_consumer.start_consuming().await {
-            error!("Error en MQTT consumer: {}", e);
-        }
-    });
+    // Start message consumer (spawns its own background task internally)
+    let _consumer_receiver = (&services.message_consumer).start_consuming().await?;
+    // Note: We ignore this receiver since we already have one from initialization
 
     // Start message processor
     let processor = services.message_processor.clone();
-    let mqtt_receiver = services.mqtt_receiver;
+    let message_receiver = services.message_receiver;
     let processor_task = tokio::spawn(async move {
-        if let Err(e) = processor.start_processing(mqtt_receiver).await {
+        if let Err(e) = processor.start_processing(message_receiver).await {
             error!("Error en message processor: {}", e);
         }
     });
 
     // Health check task
     let health_db = services.database.clone();
-    let health_kafka = services.kafka_producer.clone();
     let health_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
             let db_health = health_db.health_check().await.unwrap_or(false);
-            let kafka_health = if let Some(kafka) = &health_kafka {
-                kafka.health_check().await.unwrap_or(false)
-            } else {
-                true // Si no hay Kafka, considerarlo saludable
-            };
             if !db_health {
                 warn!("⚠️ Base de datos no está saludable");
-            }
-            if health_kafka.is_some() && !kafka_health {
-                warn!("⚠️ Kafka no está saludable");
-            }
-            if db_health && kafka_health {
-                info!("💚 Todos los servicios están saludables");
+            } else {
+                info!("💚 Base de datos saludable");
             }
         }
     });
@@ -192,8 +160,8 @@ async fn start_processing_loop(
 
             let stats = stats_processor.get_statistics().await;
             info!(
-                "📊 Estadísticas - DB Buffer: {}, Kafka Buffer: {}, Batch Size: {}",
-                stats.db_buffer_size, stats.kafka_buffer_size, stats.batch_size
+            "📊 Estadísticas - DB Buffer: {}, Batch Size: {}",
+            stats.db_buffer_size, stats.batch_size
             );
         }
     });
@@ -202,9 +170,6 @@ async fn start_processing_loop(
     tokio::select! {
         _ = shutdown_signal => {
             info!("🔔 Señal de shutdown recibida");
-        }
-        _ = mqtt_task => {
-            warn!("🔌 MQTT task terminado inesperadamente");
         }
         _ = processor_task => {
             warn!("⚙️ Processor task terminado inesperadamente");
@@ -225,16 +190,10 @@ async fn start_processing_loop(
         error!("Error flushing buffers: {}", e);
     }
 
-    // Shutdown Kafka producer if it exists
-    if let Some(kafka_producer) = services.kafka_producer {
-        if let Err(e) = kafka_producer.shutdown().await {
-            error!("Error cerrando Kafka producer: {}", e);
-        }
-    }
 
-    // Disconnect MQTT
-    if let Err(e) = services.mqtt_consumer.disconnect().await {
-        error!("Error desconectando MQTT: {}", e);
+    // Disconnect message consumer
+    if let Err(e) = services.message_consumer.disconnect().await {
+        error!("Error desconectando message consumer: {}", e);
     }
 
     info!("✅ Shutdown completado");

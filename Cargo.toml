@@ -10,9 +10,9 @@ license = "MIT"
 # Async Runtime
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
+figlet-rs = "0.1"
 
-# MQTT
-rumqttc = "0.24"
+# MQTT removed - using only Kafka
 
 # Kafka
 rdkafka = { version = "0.36", features = ["cmake-build"] }
@@ -24,6 +24,10 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid"
 # Serialización
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Protobuf
+prost = "0.12"
+prost-types = "0.12"
 
 # Geolocalización
 geoutils = "0.5"
@@ -43,9 +47,13 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 thiserror = "1.0"
 bytes = "1.0"
+async-trait = "0.1"
 
 # CLI (opcional)
 clap = { version = "4.0", features = ["derive"] }
+
+[build-dependencies]
+prost-build = "0.12"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -60,3 +68,8 @@ path = "src/main.rs"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+# Suprimir warnings específicos de dependencias (opcional)
+# Si quieres builds más limpios, puedes descomentar:
+# [workspace.metadata.cargo]
+# resolver = "2"

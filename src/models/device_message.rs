@@ -150,7 +150,7 @@ pub struct QueclinkRaw {
 }
 
 /// Datos raw de dispositivos Suntech
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SuntechRaw {
     #[serde(rename = "ASSIGN_MAP", default)]
     pub assign_map: String,
