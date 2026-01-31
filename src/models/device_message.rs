@@ -102,11 +102,11 @@ pub struct DeviceData {
 pub enum DecodedData {
     Suntech {
         #[serde(rename = "SuntechRaw")]
-        suntech_raw: SuntechRaw,
+        suntech_raw: Box<SuntechRaw>,
     },
     Queclink {
         #[serde(rename = "QueclinkRaw")]
-        queclink_raw: QueclinkRaw,
+        queclink_raw: Box<QueclinkRaw>,
     },
 }
 

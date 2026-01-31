@@ -23,7 +23,7 @@ rdkafka = { version = "0.37.0", features = ["tokio", "ssl-vendored"] }
 
 # Database
 tokio-postgres = "0.7"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
+sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
 
 # Serialización
 serde = { version = "1.0", features = ["derive"] }
@@ -42,7 +42,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 
 # Config
-config = "0.13"
+config = "0.14"
 toml = "0.8"
 
 # Utilidades

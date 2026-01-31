@@ -173,7 +173,6 @@ impl MessageProcessor {
     }
 
     /// Procesa un lote de mensajes para Kafka
-
     /// Fuerza el procesamiento de todos los buffers pendientes
     pub async fn flush_all_buffers(&self) -> Result<()> {
         info!("🔄 Flushing buffer de BD...");

@@ -120,7 +120,7 @@ impl KafkaConsumerService {
             decoded: match &kafka_msg.decoded {
                 Some(crate::config::siscom::kafka_message::Decoded::Suntech(suntech)) => {
                     crate::models::DecodedData::Suntech {
-                        suntech_raw: crate::models::SuntechRaw {
+                        suntech_raw: Box::new(crate::models::SuntechRaw {
                             assign_map: suntech.fields.get("ASSIGN_MAP").cloned().unwrap_or_default(),
                             axis_x: suntech.fields.get("AXIS_X").cloned().unwrap_or_default(),
                             axis_y: suntech.fields.get("AXIST_Y").cloned().unwrap_or_default(),
@@ -158,12 +158,12 @@ impl KafkaConsumerService {
                             trip_hourmeter: suntech.fields.get("TRIP_HOURMETER").cloned().unwrap_or_default(),
                             volt_backup: suntech.fields.get("VOLT_BACKUP").cloned().unwrap_or_default(),
                             volt_main: suntech.fields.get("VOLT_MAIN").cloned().unwrap_or_default(),
-                        }
+                        })
                     }
                 }
                 Some(crate::config::siscom::kafka_message::Decoded::Queclink(queclink)) => {
                     crate::models::DecodedData::Queclink {
-                        queclink_raw: crate::models::QueclinkRaw {
+                        queclink_raw: Box::new(crate::models::QueclinkRaw {
                             altitude: queclink.fields.get("ALTITUDE").cloned().unwrap_or_default(),
                             cell_id: queclink.fields.get("CELL_ID").cloned().unwrap_or_default(),
                             course: queclink.fields.get("CRS").cloned().unwrap_or_default(),
@@ -181,13 +181,13 @@ impl KafkaConsumerService {
                             reserved: queclink.fields.get("RESERVED").cloned().unwrap_or_default(),
                             send_date_time: queclink.fields.get("SEND_DATE_TIME").cloned().unwrap_or_default(),
                             speed: queclink.fields.get("SPD").cloned().unwrap_or_default(),
-                        }
+                        })
                     }
                 }
                 None => {
                     // Si no hay datos decodificados, usar valores por defecto
                     crate::models::DecodedData::Suntech {
-                        suntech_raw: crate::models::SuntechRaw::default(),
+                        suntech_raw: Box::new(crate::models::SuntechRaw::default()),
                     }
                 }
             },

@@ -124,7 +124,7 @@ async fn start_processing_loop(
     info!("🚀 Iniciando loop principal de procesamiento...");
 
     // Start message consumer (spawns its own background task internally)
-    let _consumer_receiver = (&services.message_consumer).start_consuming().await?;
+    let _consumer_receiver = services.message_consumer.start_consuming().await?;
     // Note: We ignore this receiver since we already have one from initialization
 
     // Start message processor

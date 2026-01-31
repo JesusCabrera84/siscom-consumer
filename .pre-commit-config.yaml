@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.56.0
+    hooks:
+      - id: semgrep
+        name: semgrep (security gate)
+        args:
+          - --config
+          - p/rust
+          - --config
+          - p/security-audit
+          - --config
+          - p/secrets
+          - --config
+          - .semgrep/rules/rust-strict.yaml
+          - --error
+
+  - repo: local
+    hooks:
+      - id: cargo-clippy
+        name: cargo clippy (deny warnings)
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        pass_filenames: false
+
+      - id: cargo-audit
+        name: cargo audit (dependencies)
+        entry: cargo audit --ignore RUSTSEC-2023-0071
+        language: system
+        pass_filenames: false
