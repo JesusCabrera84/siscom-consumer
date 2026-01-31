@@ -27,13 +27,14 @@ impl KafkaConsumerService {
         let mut binding = ClientConfig::new();
         let base_config = binding
             .set("bootstrap.servers", &config.host)
-            .set("group.id", "siscom-consumer-group")
+            .set("group.id", &config.group_id)
             .set("auto.offset.reset", "latest")
             .set("enable.auto.commit", "true")
             .set("auto.commit.interval.ms", "1000")
             .set("session.timeout.ms", "6000");
 
         // Configurar SASL authentication si las variables de entorno están presentes
+        info!("KAFKA_SASL_MECHANISM env: {:?}", std::env::var("KAFKA_SASL_MECHANISM"));
         let client_config = if let Ok(security_protocol) = std::env::var("KAFKA_SECURITY_PROTOCOL") {
             info!("🔐 Configurando security.protocol: {}", security_protocol);
             base_config.set("security.protocol", security_protocol)

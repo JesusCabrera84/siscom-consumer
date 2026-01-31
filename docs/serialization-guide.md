@@ -8,10 +8,7 @@ El **SISCOM Consumer** utiliza un sistema robusto de serialización basado en **
 
 ### Tipos de Mensajes Soportados
 
-El sistema soporta dos formatos principales de mensajes:
-
-1. **Mensajes Kafka (Protobuf)**: Formato moderno y eficiente para streaming de alto rendimiento
-2. **Mensajes MQTT (JSON)**: Formato legacy para compatibilidad con sistemas existentes
+El sistema soporta el formato de mensajes Kafka (Protobuf) para streaming de alto rendimiento.
 
 ### Fabricantes Soportados
 

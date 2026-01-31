@@ -4,7 +4,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::models::DeviceMessage;
 
-/// Trait para abstraer diferentes tipos de consumidores de mensajes (MQTT, Kafka, etc.)
+/// Trait para abstraer diferentes tipos de consumidores de mensajes (Kafka, etc.)
 #[async_trait]
 pub trait MessageConsumer: Send + Sync {
     /// Inicia el consumo de mensajes

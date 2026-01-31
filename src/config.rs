@@ -10,12 +10,13 @@ pub enum BrokerType {
     Kafka,
 }
 
-/// Configuración unificada para el broker (MQTT o Kafka)
+/// Configuración unificada para el broker (Kafka)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrokerConfig {
     pub broker_type: BrokerType,
     pub host: String,
     pub topic: String,
+    pub group_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +92,9 @@ impl AppConfig {
         let broker_topic = env::var("BROKER_TOPIC")
             .unwrap_or_else(|_| "siscom-messages".to_string());
 
+        let broker_group_id = env::var("BROKER_GROUP_ID")
+            .unwrap_or_else(|_| "siscom-consumer-group".to_string());
+
         // Kafka-specific configuration (usados solo si broker_type es Kafka)
         // Database Configuration
         let db_host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
@@ -159,6 +163,7 @@ impl AppConfig {
                 broker_type,
                 host: broker_host,
                 topic: broker_topic,
+                group_id: broker_group_id,
             },
             database: DatabaseConfig {
                 host: db_host,
@@ -238,6 +243,7 @@ impl AppConfig {
                 broker_type: BrokerType::Kafka,
                 host: "127.0.0.1:9092".to_string(),
                 topic: "siscom-messages".to_string(),
+                group_id: "siscom-consumer-group".to_string(),
             },
             database: DatabaseConfig {
                 host: "localhost".to_string(),
@@ -273,6 +279,7 @@ impl AppConfig {
                 broker_type: "kafka".to_string(),
                 host: self.broker.host.clone(),
                 topic: self.broker.topic.clone(),
+                group_id: self.broker.group_id.clone(),
             },
             database: DatabaseConfigSafe {
                 host: self.database.host.clone(),
@@ -298,6 +305,7 @@ pub struct BrokerConfigSafe {
     pub broker_type: String,
     pub host: String,
     pub topic: String,
+    pub group_id: String,
 }
 
 #[derive(Debug, Serialize)]

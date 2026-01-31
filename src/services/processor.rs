@@ -28,7 +28,7 @@ impl MessageProcessor {
         }
     }
 
-    /// Inicia el procesador principal que consume mensajes del canal MQTT
+    /// Inicia el procesador principal que consume mensajes del canal Kafka
     pub async fn start_processing(
         &self,
         mut message_receiver: mpsc::UnboundedReceiver<DeviceMessage>,
@@ -38,7 +38,7 @@ impl MessageProcessor {
         // Canal interno para batch processing
         let (batch_sender, batch_receiver) = mpsc::channel::<DeviceMessage>(self.batch_size * 2);
 
-        // Task para recibir mensajes del MQTT y enviar al batch processor
+        // Task para recibir mensajes del Kafka y enviar al batch processor
         let sender_clone = batch_sender.clone();
         tokio::spawn(async move {
             while let Some(message) = message_receiver.recv().await {
@@ -47,7 +47,7 @@ impl MessageProcessor {
                     break;
                 }
             }
-            info!("Canal de recepción MQTT cerrado");
+            info!("Canal de recepción Kafka cerrado");
         });
 
         // Task principal de procesamiento por lotes

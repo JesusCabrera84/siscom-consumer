@@ -1,4 +1,4 @@
-.PHONY: build run test fmt clippy clean dev setup docker-build docker-run docker-mqtt docker-kafka migrate help
+.PHONY: build run test fmt clippy clean dev setup docker-build docker-run docker-kafka migrate help
 
 # Default target
 help:
@@ -12,7 +12,6 @@ help:
 	@echo "  clean         - Clean build artifacts"
 	@echo "  setup         - Setup development environment"
 	@echo "  docker-build  - Build Docker image"
-	@echo "  docker-mqtt   - Run with Docker Compose (MQTT mode)"
 	@echo "  docker-kafka  - Run with Docker Compose (Kafka mode)"
 	@echo "  migrate       - Run database migrations"
 	@echo "  help          - Show this help"
@@ -75,13 +74,6 @@ docker-run: docker-build
 		exit 1; \
 	fi
 	docker run --env-file .env siscom-consumer
-
-docker-mqtt:
-	@if [ ! -f .env ]; then \
-		echo "Error: .env file not found. Copy .env.template and configure it."; \
-		exit 1; \
-	fi
-	BROKER_TYPE=mqtt docker-compose --profile mqtt up
 
 docker-kafka:
 	@if [ ! -f .env ]; then \

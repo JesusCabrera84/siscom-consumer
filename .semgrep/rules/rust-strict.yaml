@@ -1,0 +1,12 @@
+rules:
+  - id: rust-no-unwrap
+    languages: [rust]
+    message: "Evita unwrap(): maneja Result/Option explícitamente"
+    severity: ERROR
+    pattern: unwrap()
+
+  - id: rust-no-expect
+    languages: [rust]
+    message: "Evita expect(): usa manejo de errores estructurado"
+    severity: ERROR
+    pattern: expect(...)

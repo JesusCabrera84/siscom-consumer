@@ -1,6 +1,6 @@
 # SISCOM Consumer Rust
 
-High-performance MQTT/Kafka consumer for GPS tracking data processing with Protobuf support.
+High-performance Kafka consumer for GPS tracking data processing with Protobuf support.
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)](https://www.rust-lang.org/)
 [![Docker](https://img.shields.io/badge/docker-supported-blue)](https://www.docker.com/)
@@ -12,9 +12,9 @@ High-performance MQTT/Kafka consumer for GPS tracking data processing with Proto
 - 🔄 **Async Processing**: True parallel processing with Tokio
 - 🛡️ **Type Safety**: Compile-time error prevention
 - 📊 **Real-time**: POI and Geofence processing
-- 🔌 **Reliable**: Auto-reconnection for MQTT and Kafka
+- 🔌 **Reliable**: Auto-reconnection for Kafka
 - 📈 **Scalable**: Handles thousands of messages per second
-- 🔧 **Flexible**: Support for both MQTT and Kafka brokers
+- 🔧 **Flexible**: Support for Kafka brokers
 - 📦 **Protocol Buffers**: Native Protobuf support for Kafka messages
 
 ## Quick Start
@@ -24,11 +24,6 @@ High-performance MQTT/Kafka consumer for GPS tracking data processing with Proto
 cargo build --release
 
 # 2. Set environment variables
-
-## For MQTT (default):
-export BROKER_TYPE="mqtt"
-export BROKER_HOST="tcp://localhost:1883"
-export BROKER_TOPIC="siscom-messages"
 
 ## For Kafka/Redpanda:
 export BROKER_TYPE="kafka"
@@ -51,19 +46,17 @@ cargo run --release
 ## Architecture
 
 ```
-MQTT/Kafka → Consumer → Kafka + PostgreSQL
+Kafka → Consumer → PostgreSQL
 ```
 
-The consumer can read from either:
-- **MQTT**: Traditional MQTT broker (Mosquitto, etc.)
+The consumer reads from:
 - **Kafka/Redpanda**: Modern streaming platform with Protobuf-encoded messages
 
 ## How It Works
 
-**Tracking Consumer Rust** is a high-performance service designed to consume GPS tracking data from either an MQTT broker or Kafka/Redpanda streaming platform and forward the raw data to Kafka and PostgreSQL for further use and analytics. The logic for Points of Interest (POI) and Geofence evaluation is handled by a separate microservice that consumes from Kafka.
+**Tracking Consumer Rust** is a high-performance service designed to consume GPS tracking data from Kafka/Redpanda streaming platform and forward the raw data to PostgreSQL for further use and analytics. The logic for Points of Interest (POI) and Geofence evaluation is handled by a separate microservice that consumes from Kafka.
 
-The consumer supports two input methods:
-- **MQTT Mode**: Traditional MQTT broker integration with JSON messages
+The consumer supports:
 - **Kafka Mode**: Modern streaming platform with Protocol Buffer messages
 
 ### Execution Flow
@@ -75,26 +68,24 @@ The consumer supports two input methods:
 2. **Service Initialization**
    - Connects to PostgreSQL (for persistent storage).
    - Configures the Kafka producer (for streaming data).
-   - Sets up the MQTT consumer (to receive GPS messages).
+   - Sets up the Kafka consumer (to receive GPS messages).
    - Initializes the message processor (handles batching and dispatch).
 
 3. **Main Processing Loop**
-   - Starts the MQTT consumer in the background, which receives messages and pushes them to an internal channel.
+   - Starts the Kafka consumer in the background, which receives messages and pushes them to an internal channel.
    - The message processor consumes messages from the channel and batches results.
-   - Data is sent to Kafka and PostgreSQL.
+   - Data is sent to PostgreSQL.
    - Health checks and statistics are periodically logged.
 
 4. **Graceful Shutdown**
-   - On receiving a shutdown signal, the application flushes all buffers, closes Kafka and MQTT connections, and ensures all data is persisted.
+   - On receiving a shutdown signal, the application flushes all buffers, closes Kafka connections, and ensures all data is persisted.
 
 ### Execution Diagram
 
 ```mermaid
 flowchart TD
-    A1[MQTT Broker] -->|JSON Messages| B1(MQTT Consumer)
-    A2[Kafka/Redpanda] -->|Protobuf Messages| B2(Kafka Consumer)
-    B1 --> C[Internal Channel]
-    B2 --> C
+    A[Kafka/Redpanda] -->|Protobuf Messages| B(Kafka Consumer)
+    B --> C[Internal Channel]
     C --> D[Message Processor]
     D --> E[Kafka Producer]
     D --> F[PostgreSQL]
@@ -138,22 +129,13 @@ The application is configured entirely through environment variables. A template
 
 ### Required Environment Variables
 
-#### Broker Configuration (Choose one mode)
-- `BROKER_TYPE` - **Required**. Broker type: `"mqtt"` or `"kafka"`
+#### Broker Configuration
+- `BROKER_TYPE` - **Required**. Broker type: `"kafka"`
 - `BROKER_HOST` - **Required**. Broker connection string
-  - For MQTT: `tcp://host:port` (e.g., `tcp://localhost:1883`)
   - For Kafka: `host:port` (e.g., `localhost:9092` or `redpanda:9092`)
 - `BROKER_TOPIC` - **Required**. Topic to consume from (default: `siscom-messages`)
 
-#### MQTT Configuration (when BROKER_TYPE=mqtt)
-- `MQTT_USERNAME` - MQTT username (optional)
-- `MQTT_PASSWORD` - MQTT password (optional)
-- `MQTT_CLIENT_ID` - Client ID (default: `siscom-consumer-rust`)
-- `MQTT_KEEP_ALIVE_SECS` - Keep alive interval (default: 60)
-- `MQTT_CLEAN_SESSION` - Clean session flag (default: true)
-- `MQTT_MAX_RECONNECT_ATTEMPTS` - Max reconnection attempts (default: 10)
-
-#### Kafka Configuration (when BROKER_TYPE=kafka)
+#### Kafka Configuration
 - `KAFKA_BATCH_SIZE` - Batch size for producer (default: 100)
 - `KAFKA_BATCH_TIMEOUT_MS` - Batch timeout in ms (default: 100)
 - `KAFKA_COMPRESSION` - Compression type: `snappy`, `gzip`, etc. (default: snappy)
@@ -189,16 +171,6 @@ The application is configured entirely through environment variables. A template
 
 ### Broker Modes
 
-#### MQTT Mode (Traditional)
-```bash
-export BROKER_TYPE=mqtt
-export BROKER_HOST=tcp://localhost:1883
-export BROKER_TOPIC=siscom-messages
-```
-- Connects to MQTT brokers (Mosquitto, HiveMQ, etc.)
-- Consumes JSON messages from MQTT topics
-- Maintains backward compatibility with existing deployments
-
 #### Kafka Mode (Modern Streaming)
 ```bash
 export BROKER_TYPE=kafka
@@ -210,23 +182,6 @@ export BROKER_TOPIC=siscom-messages
 - Higher throughput and better scalability for large deployments
 
 ### Message Formats
-
-#### MQTT Messages (JSON)
-```json
-{
-  "data": {
-    "device_id": "ABC123",
-    "latitude": -12.0464,
-    "longitude": -77.0428,
-    "speed": 45.2,
-    "course": 180.0
-  },
-  "decoded": { "suntech_raw": { ... } },
-  "metadata": { ... },
-  "uuid": "uuid-string",
-  "raw": "original message"
-}
-```
 
 #### Kafka Messages (Protobuf)
 Messages follow the `siscom.proto` schema with fields for:
@@ -279,19 +234,6 @@ Messages follow the `siscom.proto` schema with fields for:
 
 The project includes a complete Docker Compose setup with infrastructure services:
 
-**For MQTT mode:**
-```bash
-# Copy and edit environment
-cp .env.template .env
-# Edit .env to set BROKER_TYPE=mqtt
-
-# Run with MQTT infrastructure
-docker-compose --profile mqtt up
-
-# Or run only the application (if you have external MQTT)
-docker-compose run --rm siscom-consumer
-```
-
 **For Kafka mode:**
 ```bash
 # Copy and edit environment
@@ -305,7 +247,6 @@ docker-compose --profile kafka up
 **Available services:**
 - `siscom-consumer`: Main application
 - `postgres`: PostgreSQL database
-- `mosquitto`: MQTT broker (MQTT profile)
 - `redpanda`: Kafka-compatible streaming platform (Kafka profile)
 
 #### Manual Docker Usage
@@ -318,15 +259,15 @@ docker build -t siscom-consumer .
 docker run --env-file .env siscom-consumer
 
 # Run with specific environment variables
-docker run -e BROKER_TYPE=mqtt -e BROKER_HOST=host.docker.internal:1883 siscom-consumer
+docker run -e BROKER_TYPE=kafka -e BROKER_HOST=host.docker.internal:9092 siscom-consumer
 ```
 
 ### Configuration Examples
 
-#### Local Development (MQTT)
+#### Local Development (Kafka)
 ```bash
-export BROKER_TYPE=mqtt
-export BROKER_HOST=tcp://localhost:1883
+export BROKER_TYPE=kafka
+export BROKER_HOST=localhost:9092
 export BROKER_TOPIC=test-messages
 export DB_HOST=localhost
 export DB_DATABASE=tracking_dev
@@ -367,41 +308,9 @@ export DB_DATABASE=tracking_prod
 export RUST_LOG=warn
 ```
 
-## Migration Guide
-
-### From MQTT-only to Kafka
-
-1. **Update environment variables:**
-   ```bash
-   # Old configuration
-   export MQTT_BROKER=localhost
-   export MQTT_PORT=1883
-   export MQTT_TOPIC=tracking/data
-
-   # New configuration
-   export BROKER_TYPE=kafka
-   export BROKER_HOST=localhost:9092
-   export BROKER_TOPIC=siscom-messages
-   ```
-
-2. **Update message producers** to send Protobuf messages according to `siscom.proto`
-
-3. **Test thoroughly** in staging environment before production deployment
-
-### Backward Compatibility
-
-- **MQTT legacy variables** (`MQTT_*`) are still supported but deprecated
-- **Old configuration format** continues to work
-- **Database schema** remains unchanged
-- **API contracts** maintain compatibility
-
-### Troubleshooting
+## Troubleshooting
 
 #### Common Issues
-
-**"Unknown broker type" error:**
-- Check that `BROKER_TYPE` is set to either `"mqtt"` or `"kafka"`
-- Values are case-sensitive
 
 **"Connection refused" for Kafka:**
 - Verify Kafka brokers are running and accessible
@@ -485,7 +394,6 @@ export KAFKA_BATCH_TIMEOUT_MS=50
 ```
 
 #### Security
-- Use authentication for MQTT brokers in production
 - Configure TLS for all connections
 - Use managed databases with proper security groups
 - Rotate credentials regularly

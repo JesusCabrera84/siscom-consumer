@@ -1,0 +1,6 @@
+rules: []
+includes:
+  - .semgrep/rules/rust-strict.yaml
+  - p/rust
+  - p/security-audit
+  - p/secrets
