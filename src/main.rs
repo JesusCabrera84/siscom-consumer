@@ -3,11 +3,11 @@ use std::sync::Arc;
 use tokio::signal;
 use tracing::{error, info, warn};
 
+mod boot;
 mod config;
 mod errors;
 mod models;
 mod services;
-mod boot;
 
 use config::AppConfig;
 use services::{DatabaseService, KafkaConsumerService, MessageConsumer, MessageProcessor};
@@ -94,9 +94,8 @@ async fn initialize_services(config: &AppConfig) -> Result<Services> {
 
     // Inicializar Kafka consumer
     info!("📡 Inicializando Kafka consumer...");
-    let message_consumer: Box<dyn MessageConsumer> = Box::new(
-        KafkaConsumerService::new(&config.broker)?
-    );
+    let message_consumer: Box<dyn MessageConsumer> =
+        Box::new(KafkaConsumerService::new(&config.broker)?);
 
     // Iniciar el consumo y obtener el receiver
     let message_receiver = message_consumer.start_consuming().await?;
@@ -160,8 +159,8 @@ async fn start_processing_loop(
 
             let stats = stats_processor.get_statistics().await;
             info!(
-            "📊 Estadísticas - DB Buffer: {}, Batch Size: {}",
-            stats.db_buffer_size, stats.batch_size
+                "📊 Estadísticas - DB Buffer: {}, Batch Size: {}",
+                stats.db_buffer_size, stats.batch_size
             );
         }
     });
@@ -189,7 +188,6 @@ async fn start_processing_loop(
     if let Err(e) = services.message_processor.flush_all_buffers().await {
         error!("Error flushing buffers: {}", e);
     }
-
 
     // Disconnect message consumer
     if let Err(e) = services.message_consumer.disconnect().await {

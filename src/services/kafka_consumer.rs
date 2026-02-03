@@ -34,8 +34,12 @@ impl KafkaConsumerService {
             .set("session.timeout.ms", "6000");
 
         // Configurar SASL authentication si las variables de entorno están presentes
-        info!("KAFKA_SASL_MECHANISM env: {:?}", std::env::var("KAFKA_SASL_MECHANISM"));
-        let client_config = if let Ok(security_protocol) = std::env::var("KAFKA_SECURITY_PROTOCOL") {
+        info!(
+            "KAFKA_SASL_MECHANISM env: {:?}",
+            std::env::var("KAFKA_SASL_MECHANISM")
+        );
+        let client_config = if let Ok(security_protocol) = std::env::var("KAFKA_SECURITY_PROTOCOL")
+        {
             info!("🔐 Configurando security.protocol: {}", security_protocol);
             base_config.set("security.protocol", security_protocol)
         } else {
@@ -79,14 +83,20 @@ impl KafkaConsumerService {
     ) -> Result<DeviceMessage> {
         // Extraer datos normalizados del mapa
         let data_map = &kafka_msg.data;
-        let metadata = kafka_msg.metadata.as_ref().ok_or_else(|| anyhow::anyhow!("Missing metadata in KafkaMessage"))?;
+        let metadata = kafka_msg
+            .metadata
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Missing metadata in KafkaMessage"))?;
 
         // Crear DeviceMessage desde los datos protobuf
         let device_message = DeviceMessage {
             data: crate::models::DeviceData {
                 alert: data_map.get("ALERT").cloned().unwrap_or_default(),
                 altitude: data_map.get("ALTITUDE").cloned().unwrap_or_default(),
-                backup_battery_voltage: data_map.get("BACKUP_BATTERY_VOLTAGE").cloned().unwrap_or_default(),
+                backup_battery_voltage: data_map
+                    .get("BACKUP_BATTERY_VOLTAGE")
+                    .cloned()
+                    .unwrap_or_default(),
                 backup_battery_percent: data_map.get("PERCENT_BACKUP").cloned().unwrap_or_default(),
                 cell_id: data_map.get("CELL_ID").cloned().unwrap_or_default(),
                 course: data_map.get("COURSE").cloned().unwrap_or_default(),
@@ -101,7 +111,10 @@ impl KafkaConsumerService {
                 lac: data_map.get("LAC").cloned().unwrap_or_default(),
                 latitude: data_map.get("LATITUD").cloned().unwrap_or_default(),
                 longitude: data_map.get("LONGITUD").cloned().unwrap_or_default(),
-                main_battery_voltage: data_map.get("MAIN_BATTERY_VOLTAGE").cloned().unwrap_or_default(),
+                main_battery_voltage: data_map
+                    .get("MAIN_BATTERY_VOLTAGE")
+                    .cloned()
+                    .unwrap_or_default(),
                 mcc: data_map.get("MCC").cloned().unwrap_or_default(),
                 mnc: data_map.get("MNC").cloned().unwrap_or_default(),
                 model: data_map.get("MODEL").cloned().unwrap_or_default(),
@@ -121,7 +134,11 @@ impl KafkaConsumerService {
                 Some(crate::config::siscom::kafka_message::Decoded::Suntech(suntech)) => {
                     crate::models::DecodedData::Suntech {
                         suntech_raw: Box::new(crate::models::SuntechRaw {
-                            assign_map: suntech.fields.get("ASSIGN_MAP").cloned().unwrap_or_default(),
+                            assign_map: suntech
+                                .fields
+                                .get("ASSIGN_MAP")
+                                .cloned()
+                                .unwrap_or_default(),
                             axis_x: suntech.fields.get("AXIS_X").cloned().unwrap_or_default(),
                             axis_y: suntech.fields.get("AXIST_Y").cloned().unwrap_or_default(),
                             axis_z: suntech.fields.get("AXIS_Z").cloned().unwrap_or_default(),
@@ -144,21 +161,57 @@ impl KafkaConsumerService {
                             mode_map: suntech.fields.get("MODE_MAP").cloned().unwrap_or_default(),
                             msg_num: suntech.fields.get("MSG_NUM").cloned().unwrap_or_default(),
                             msg_type: suntech.fields.get("MSG_TYPE").cloned().unwrap_or_default(),
-                            net_status: suntech.fields.get("NET_STATUS").cloned().unwrap_or_default(),
-                            odometer_mts: suntech.fields.get("ODOMETER_MTS").cloned().unwrap_or_default(),
+                            net_status: suntech
+                                .fields
+                                .get("NET_STATUS")
+                                .cloned()
+                                .unwrap_or_default(),
+                            odometer_mts: suntech
+                                .fields
+                                .get("ODOMETER_MTS")
+                                .cloned()
+                                .unwrap_or_default(),
                             out_state: suntech.fields.get("OUT_STATE").cloned().unwrap_or_default(),
-                            report_map: suntech.fields.get("REPORT_MAP").cloned().unwrap_or_default(),
+                            report_map: suntech
+                                .fields
+                                .get("REPORT_MAP")
+                                .cloned()
+                                .unwrap_or_default(),
                             rx_lvl: suntech.fields.get("RX_LVL").cloned().unwrap_or_default(),
                             satellites: suntech.fields.get("SAT").cloned().unwrap_or_default(),
                             speed: suntech.fields.get("SPD").cloned().unwrap_or_default(),
-                            speed_time: suntech.fields.get("SPEED_TIME").cloned().unwrap_or_default(),
-                            stt_rpt_type: suntech.fields.get("STT_RPT_TYPE").cloned().unwrap_or_default(),
-                            total_distance: suntech.fields.get("TOTAL_DISTANCE").cloned().unwrap_or_default(),
-                            trip_distance: suntech.fields.get("TRIP_DISTANCE").cloned().unwrap_or_default(),
-                            trip_hourmeter: suntech.fields.get("TRIP_HOURMETER").cloned().unwrap_or_default(),
-                            volt_backup: suntech.fields.get("VOLT_BACKUP").cloned().unwrap_or_default(),
+                            speed_time: suntech
+                                .fields
+                                .get("SPEED_TIME")
+                                .cloned()
+                                .unwrap_or_default(),
+                            stt_rpt_type: suntech
+                                .fields
+                                .get("STT_RPT_TYPE")
+                                .cloned()
+                                .unwrap_or_default(),
+                            total_distance: suntech
+                                .fields
+                                .get("TOTAL_DISTANCE")
+                                .cloned()
+                                .unwrap_or_default(),
+                            trip_distance: suntech
+                                .fields
+                                .get("TRIP_DISTANCE")
+                                .cloned()
+                                .unwrap_or_default(),
+                            trip_hourmeter: suntech
+                                .fields
+                                .get("TRIP_HOURMETER")
+                                .cloned()
+                                .unwrap_or_default(),
+                            volt_backup: suntech
+                                .fields
+                                .get("VOLT_BACKUP")
+                                .cloned()
+                                .unwrap_or_default(),
                             volt_main: suntech.fields.get("VOLT_MAIN").cloned().unwrap_or_default(),
-                        })
+                        }),
                     }
                 }
                 Some(crate::config::siscom::kafka_message::Decoded::Queclink(queclink)) => {
@@ -167,9 +220,17 @@ impl KafkaConsumerService {
                             altitude: queclink.fields.get("ALTITUDE").cloned().unwrap_or_default(),
                             cell_id: queclink.fields.get("CELL_ID").cloned().unwrap_or_default(),
                             course: queclink.fields.get("CRS").cloned().unwrap_or_default(),
-                            device_id: queclink.fields.get("DEVICE_ID").cloned().unwrap_or_default(),
+                            device_id: queclink
+                                .fields
+                                .get("DEVICE_ID")
+                                .cloned()
+                                .unwrap_or_default(),
                             fix: queclink.fields.get("FIX").cloned().unwrap_or_default(),
-                            gps_date_time: queclink.fields.get("GPS_DATE_TIME").cloned().unwrap_or_default(),
+                            gps_date_time: queclink
+                                .fields
+                                .get("GPS_DATE_TIME")
+                                .cloned()
+                                .unwrap_or_default(),
                             header: queclink.fields.get("HEADER").cloned().unwrap_or_default(),
                             lac: queclink.fields.get("LAC").cloned().unwrap_or_default(),
                             latitude: queclink.fields.get("LAT").cloned().unwrap_or_default(),
@@ -177,11 +238,19 @@ impl KafkaConsumerService {
                             mcc: queclink.fields.get("MCC").cloned().unwrap_or_default(),
                             mnc: queclink.fields.get("MNC").cloned().unwrap_or_default(),
                             msg_num: queclink.fields.get("MSG_NUM").cloned().unwrap_or_default(),
-                            protocol_version: queclink.fields.get("PROTOCOL_VERSION").cloned().unwrap_or_default(),
+                            protocol_version: queclink
+                                .fields
+                                .get("PROTOCOL_VERSION")
+                                .cloned()
+                                .unwrap_or_default(),
                             reserved: queclink.fields.get("RESERVED").cloned().unwrap_or_default(),
-                            send_date_time: queclink.fields.get("SEND_DATE_TIME").cloned().unwrap_or_default(),
+                            send_date_time: queclink
+                                .fields
+                                .get("SEND_DATE_TIME")
+                                .cloned()
+                                .unwrap_or_default(),
                             speed: queclink.fields.get("SPD").cloned().unwrap_or_default(),
-                        })
+                        }),
                     }
                 }
                 None => {

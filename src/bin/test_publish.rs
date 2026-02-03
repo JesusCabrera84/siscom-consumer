@@ -40,7 +40,10 @@ async fn main() {
 
     match delivery_status {
         Ok((partition, offset)) => {
-            println!("✅ Mensaje enviado exitosamente a partición {} con offset {}", partition, offset);
+            println!(
+                "✅ Mensaje enviado exitosamente a partición {} con offset {}",
+                partition, offset
+            );
         }
         Err((e, _)) => {
             eprintln!("❌ Error enviando mensaje: {}", e);

@@ -16,11 +16,7 @@ pub struct MessageProcessor {
 }
 
 impl MessageProcessor {
-    pub fn new(
-        database: Arc<DatabaseService>,
-        batch_size: usize,
-        flush_interval_ms: u64,
-    ) -> Self {
+    pub fn new(database: Arc<DatabaseService>, batch_size: usize, flush_interval_ms: u64) -> Self {
         Self {
             database,
             batch_size,

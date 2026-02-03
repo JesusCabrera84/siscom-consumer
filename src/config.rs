@@ -27,7 +27,6 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub host: String,
@@ -81,19 +80,21 @@ impl AppConfig {
         let broker_type = match broker_type_str.to_lowercase().as_str() {
             "kafka" | "redpanda" => BrokerType::Kafka,
             _ => {
-                eprintln!("⚠️ BROKER_TYPE '{}' no reconocido, usando 'kafka' por defecto", broker_type_str);
+                eprintln!(
+                    "⚠️ BROKER_TYPE '{}' no reconocido, usando 'kafka' por defecto",
+                    broker_type_str
+                );
                 BrokerType::Kafka
             }
         };
 
-        let broker_host = env::var("BROKER_HOST")
-            .unwrap_or_else(|_| "127.0.0.1:9092".to_string());
+        let broker_host = env::var("BROKER_HOST").unwrap_or_else(|_| "127.0.0.1:9092".to_string());
 
-        let broker_topic = env::var("BROKER_TOPIC")
-            .unwrap_or_else(|_| "siscom-messages".to_string());
+        let broker_topic =
+            env::var("BROKER_TOPIC").unwrap_or_else(|_| "siscom-messages".to_string());
 
-        let broker_group_id = env::var("BROKER_GROUP_ID")
-            .unwrap_or_else(|_| "siscom-consumer-group".to_string());
+        let broker_group_id =
+            env::var("BROKER_GROUP_ID").unwrap_or_else(|_| "siscom-consumer-group".to_string());
 
         // Kafka-specific configuration (usados solo si broker_type es Kafka)
         // Database Configuration

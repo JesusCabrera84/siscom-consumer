@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copiar archivos de configuración y código fuente
-COPY .devcontainer/Cargo.toml .devcontainer/Cargo.lock ./
+COPY Cargo.toml Cargo.lock ./
 COPY src/ ./src/
 COPY assets/ ./assets/
 
